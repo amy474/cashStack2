@@ -9,6 +9,8 @@ final class CashScene: SKScene {
     var onTender: ((Denomination) -> Void)?
     var onGrab: ((Denomination) -> Void)?
     var onCrossPayLine: ((Bool) -> Void)?
+    /// A piece was double-tapped and has been broken into smaller money.
+    var onSplit: ((Denomination) -> Void)?
 
     /// When false, dragging a note to the top just drops it back in the pile.
     var isPaymentActive = false { didSet { refreshPayLine() } }
@@ -223,6 +225,14 @@ final class CashScene: SKScene {
         let point = touch.location(in: self)
         guard let node = topMoney(at: point) else { return }
 
+        // Double tap breaks a piece into smaller money.
+        if touch.tapCount >= 2 {
+            heldNode?.removeAction(forKey: "holdTimer")
+            cancelTouch()
+            split(node)
+            return
+        }
+
         activeTouch = touch
         heldNode = node
         grabOffset = CGPoint(x: node.position.x - point.x, y: node.position.y - point.y)
@@ -302,7 +312,8 @@ final class CashScene: SKScene {
             node.endHold(flick: flick)
         } else {
             // A plain tap: give it a small hop so the pile feels alive.
-            node.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 0.6))
+            let mass = node.physicsBody?.mass ?? 0.02
+            node.physicsBody?.applyImpulse(CGVector(dx: 0, dy: mass * 28))
             Haptics.tap()
         }
 
@@ -329,6 +340,52 @@ final class CashScene: SKScene {
         activeTouch = nil
         heldNode = nil
         flick = .zero
+    }
+
+    // MARK: Breaking money up
+
+    /// Burst one piece into the fewest smaller pieces of the same value, right
+    /// where it was lying. The wallet's own record is updated to match, so the
+    /// next sync sees nothing to do.
+    private func split(_ node: MoneyNode) {
+        let pieces = Money.split(node.denomination)
+        guard !pieces.isEmpty else {
+            node.shrugOff()
+            Haptics.refuse()
+            return
+        }
+        guard allMoney().count + pieces.count - 1 <= Money.maxLoosePieces else {
+            node.shrugOff()
+            Haptics.refuse()
+            return
+        }
+
+        let origin = node.position
+        let lean = node.zRotation
+        nodesByDenomination[node.denomination.minor]?.removeAll { $0 === node }
+        node.burst()
+        Haptics.split()
+
+        for (index, piece) in pieces.enumerated() {
+            let child = MoneyNode(denomination: piece)
+            let angle = CGFloat(index) / CGFloat(pieces.count) * .pi * 2
+                      + CGFloat.random(in: -0.35...0.35)
+            child.position = CGPoint(x: origin.x + cos(angle) * 14,
+                                     y: origin.y + sin(angle) * 14)
+            child.zRotation = lean + CGFloat.random(in: -0.4...0.4)
+            child.alpha = 0
+            addChild(child)
+            child.run(.fadeIn(withDuration: 0.12))
+
+            // Push them apart so the break reads as a break.
+            let mass = child.physicsBody?.mass ?? 0.02
+            child.physicsBody?.velocity = CGVector(dx: cos(angle) * 170,
+                                                   dy: sin(angle) * 170 + 90)
+            child.physicsBody?.applyAngularImpulse(CGFloat.random(in: -0.0009...0.0009) * mass * 50)
+            nodesByDenomination[piece.minor, default: []].append(child)
+        }
+
+        onSplit?(node.denomination)
     }
 
     private func topMoney(at point: CGPoint) -> MoneyNode? {

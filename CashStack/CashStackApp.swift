@@ -6,6 +6,7 @@ struct CashStackApp: App {
     @StateObject private var wallet = WalletStore()
 
     init() {
+        Fonts.register()
         Self.applyChrome()
     }
 
@@ -26,7 +27,7 @@ struct CashStackApp: App {
         bar.backgroundColor = Theme.uiGround
         bar.shadowColor = Theme.uiInk
         bar.titleTextAttributes = [
-            .font: Theme.uiRounded(17, .semibold),
+            .font: Theme.uiFont(17, .semibold),
             .foregroundColor: Theme.uiInk
         ]
         UINavigationBar.appearance().standardAppearance = bar
@@ -34,6 +35,6 @@ struct CashStackApp: App {
         UINavigationBar.appearance().compactAppearance = bar
 
         UIBarButtonItem.appearance().setTitleTextAttributes(
-            [.font: Theme.uiRounded(16, .semibold), .foregroundColor: Theme.uiInk], for: .normal)
+            [.font: Theme.uiFont(16, .semibold), .foregroundColor: Theme.uiInk], for: .normal)
     }
 }

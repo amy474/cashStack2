@@ -11,6 +11,10 @@ enum Theme {
     static let inkSoft     = Color.black.opacity(0.45)
     static let inkFaint    = Color.black.opacity(0.12)
 
+    /// Money coming back to you. Dark enough to clear 3:1 on white at display
+    /// sizes, bright enough to still read as the green of a hundred.
+    static let credit      = Color(rgb: 0x00A651)
+
     static let uiGround    = UIColor.white
     static let uiInk       = UIColor.black
 
@@ -21,16 +25,40 @@ enum Theme {
     static let radiusChip: CGFloat  = 100
     static let radiusCard: CGFloat  = 18
 
-    // MARK: Type — rounded sans, always
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .bold,     design: .rounded) }
-    static func title(_ size: CGFloat)   -> Font { .system(size: size, weight: .semibold, design: .rounded) }
-    static func body(_ size: CGFloat)    -> Font { .system(size: size, weight: .medium,   design: .rounded) }
-    static func mono(_ size: CGFloat)    -> Font { .system(size: size, weight: .semibold, design: .rounded) }
+    // MARK: Type — Satoshi throughout
 
-    static func uiRounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: weight)
-        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
-        return UIFont(descriptor: descriptor, size: size)
+    /// The five Satoshi faces bundled with the app, by PostScript name.
+    enum Face: String {
+        case light   = "Satoshi-Light"
+        case regular = "Satoshi-Regular"
+        case medium  = "Satoshi-Medium"
+        case bold    = "Satoshi-Bold"
+        case black   = "Satoshi-Black"
+
+        /// Nearest Satoshi face for a UIKit weight.
+        static func matching(_ weight: UIFont.Weight) -> Face {
+            switch weight {
+            case .ultraLight, .thin, .light: .light
+            case .regular:                   .regular
+            case .medium, .semibold:         .medium
+            case .heavy, .black:             .black
+            default:                         .bold
+            }
+        }
+    }
+
+    static func display(_ size: CGFloat) -> Font { font(.bold, size) }
+    static func title(_ size: CGFloat)   -> Font { font(.medium, size) }
+    static func body(_ size: CGFloat)    -> Font { font(.regular, size) }
+    static func label(_ size: CGFloat)   -> Font { font(.bold, size) }
+
+    static func font(_ face: Face, _ size: CGFloat) -> Font {
+        .custom(face.rawValue, size: size, relativeTo: .body)
+    }
+
+    static func uiFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
+        UIFont(name: Face.matching(weight).rawValue, size: size)
+            ?? .systemFont(ofSize: size, weight: weight)
     }
 }
 

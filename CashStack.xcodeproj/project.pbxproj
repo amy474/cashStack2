@@ -22,18 +22,54 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A1000000000000000000G1 /* CashStack */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CashStack; sourceTree = "<group>"; };
-		A1000000000000000000G2 /* CashStackUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CashStackUITests; sourceTree = "<group>"; };
+		A1000000000000000000G1 /* CashStack */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashStack;
+			sourceTree = "<group>";
+		};
+		A1000000000000000000G2 /* CashStackUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashStackUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A1000000000000000000B2 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A1000000000000000000B5 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A1000000000000000000B2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000B5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A1000000000000000000M1 = {isa = PBXGroup; children = (A1000000000000000000G1 /* CashStack */, A1000000000000000000G2 /* CashStackUITests */, A1000000000000000000P1 /* Products */, ); sourceTree = "<group>"; };
-		A1000000000000000000P1 /* Products */ = {isa = PBXGroup; children = (A1000000000000000000F1 /* CashStack.app */, A1000000000000000000F2 /* CashStackUITests.xctest */, ); name = Products; sourceTree = "<group>"; };
+		A1000000000000000000M1 = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000G1 /* CashStack */,
+				A1000000000000000000G2 /* CashStackUITests */,
+				A1000000000000000000P1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1000000000000000000P1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000F1 /* CashStack.app */,
+				A1000000000000000000F2 /* CashStackUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -45,8 +81,10 @@
 				A1000000000000000000B2 /* Frameworks */,
 				A1000000000000000000B3 /* Resources */,
 			);
-			buildRules = ();
-			dependencies = ();
+			buildRules = (
+			);
+			dependencies = (
+			);
 			fileSystemSynchronizedGroups = (
 				A1000000000000000000G1 /* CashStack */,
 			);
@@ -63,7 +101,8 @@
 				A1000000000000000000B5 /* Frameworks */,
 				A1000000000000000000B6 /* Resources */,
 			);
-			buildRules = ();
+			buildRules = (
+			);
 			dependencies = (
 				A1000000000000000000Y1 /* PBXTargetDependency */,
 			);
@@ -97,26 +136,64 @@
 			buildConfigurationList = A1000000000000000000C1 /* Build configuration list for PBXProject "CashStack" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (en, Base, );
+			knownRegions = (
+				en,
+				Base,
+			);
 			mainGroup = A1000000000000000000M1;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000000000000000000P1 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A1000000000000000000T1 /* CashStack */, A1000000000000000000T2 /* CashStackUITests */, );
+			targets = (
+				A1000000000000000000T1 /* CashStack */,
+				A1000000000000000000T2 /* CashStackUITests */,
+			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A1000000000000000000B3 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A1000000000000000000B6 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A1000000000000000000B3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000B6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A1000000000000000000B1 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A1000000000000000000B4 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A1000000000000000000B1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000B4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1000000000000000000Y1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000T1 /* CashStack */;
+			targetProxy = A1000000000000000000X1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1000000000000000000D1 /* Debug */ = {
@@ -136,7 +213,10 @@
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)", );
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -179,6 +259,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = URYQTTYR57;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -186,7 +267,10 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bokscot.cashstack;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -204,6 +288,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = URYQTTYR57;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -211,7 +296,10 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bokscot.cashstack;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -257,30 +345,31 @@
 		};
 /* End XCBuildConfiguration section */
 
-/* Begin PBXTargetDependency section */
-		A1000000000000000000Y1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A1000000000000000000T1 /* CashStack */;
-			targetProxy = A1000000000000000000X1 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCConfigurationList section */
 		A1000000000000000000C1 /* Build configuration list for PBXProject "CashStack" */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (A1000000000000000000D1 /* Debug */, A1000000000000000000D2 /* Release */, );
+			buildConfigurations = (
+				A1000000000000000000D1 /* Debug */,
+				A1000000000000000000D2 /* Release */,
+			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		A1000000000000000000C2 /* Build configuration list for PBXNativeTarget "CashStack" */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (A1000000000000000000D3 /* Debug */, A1000000000000000000D4 /* Release */, );
+			buildConfigurations = (
+				A1000000000000000000D3 /* Debug */,
+				A1000000000000000000D4 /* Release */,
+			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		A1000000000000000000C3 /* Build configuration list for PBXNativeTarget "CashStackUITests" */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (A1000000000000000000D5 /* Debug */, A1000000000000000000D6 /* Release */, );
+			buildConfigurations = (
+				A1000000000000000000D5 /* Debug */,
+				A1000000000000000000D6 /* Release */,
+			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
