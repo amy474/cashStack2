@@ -50,14 +50,7 @@ struct AccountsSheet: View {
                         Haptics.tap()
                         isLinking = true
                         Task {
-                            await wallet.link(DemoBankDataSource(
-                                institution: Institution(id: "lochside", name: "Lochside",
-                                                         mark: "L", tint: Color(rgb: 0x16DE7F)),
-                                accounts: [LinkedAccount(id: "lochside-joint",
-                                                         institution: Institution(id: "lochside", name: "Lochside",
-                                                                                  mark: "L", tint: Color(rgb: 0x16DE7F)),
-                                                         nickname: "Joint", maskedNumber: "•••• 7725",
-                                                         availableMinor: 4_310, isIncluded: true)]))
+                            await wallet.link(DemoBanks.extraSource())
                             isLinking = false
                         }
                     } label: {
@@ -74,14 +67,14 @@ struct AccountsSheet: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(isLinking || wallet.accounts.contains { $0.institution.id == "lochside" })
+                    .disabled(isLinking || wallet.accounts.contains { $0.institution.id == "boab" })
 
                     Hairline()
 
                     if !wallet.history.isEmpty {
                         HStack {
                             Text("RECENT")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .font(Theme.label(10))
                                 .kerning(2)
                                 .foregroundStyle(Theme.inkSoft)
                             Spacer()

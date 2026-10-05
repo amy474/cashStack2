@@ -79,21 +79,21 @@ enum MoneyArt {
             shape.stroke()
 
             // Value.
-            let faceFont = Theme.uiRounded(size.height * 0.46, .bold)
-            let poundFont = Theme.uiRounded(size.height * 0.26, .bold)
+            let faceFont = Theme.uiFont(size.height * 0.46, .bold)
+            let symbolFont = Theme.uiFont(size.height * 0.26, .bold)
             let faceWidth = d.face.size(withAttributes: [.font: faceFont]).width
-            let poundWidth = "£".size(withAttributes: [.font: poundFont]).width
+            let symbolWidth = Money.symbol.size(withAttributes: [.font: symbolFont]).width
             let originX: CGFloat = 13
             let baseY = size.height * 0.5 - faceFont.lineHeight * 0.5
 
-            "£".draw(at: CGPoint(x: originX, y: baseY + faceFont.lineHeight * 0.12),
-                     withAttributes: [.font: poundFont, .foregroundColor: UIColor.black])
-            d.face.draw(at: CGPoint(x: originX + poundWidth + 1, y: baseY),
+            Money.symbol.draw(at: CGPoint(x: originX, y: baseY + faceFont.lineHeight * 0.12),
+                              withAttributes: [.font: symbolFont, .foregroundColor: UIColor.black])
+            d.face.draw(at: CGPoint(x: originX + symbolWidth + 1, y: baseY),
                         withAttributes: [.font: faceFont, .foregroundColor: UIColor.black])
 
             // Wordmark, letterspaced small caps.
             let mark = NSAttributedString(string: "CASHSTACK", attributes: [
-                .font: Theme.uiRounded(6, .semibold),
+                .font: Theme.uiFont(6, .semibold),
                 .foregroundColor: UIColor.black.withAlphaComponent(0.6),
                 .kern: 1.6
             ])
@@ -101,10 +101,10 @@ enum MoneyArt {
 
             // Repeat of the value, small, bottom right of the printed area.
             let small = NSAttributedString(string: d.label, attributes: [
-                .font: Theme.uiRounded(9, .bold),
+                .font: Theme.uiFont(9, .bold),
                 .foregroundColor: UIColor.black
             ])
-            small.draw(at: CGPoint(x: originX + faceWidth + poundWidth + 8, y: size.height - 18))
+            small.draw(at: CGPoint(x: originX + faceWidth + symbolWidth + 8, y: size.height - 18))
         }
     }
 
@@ -156,7 +156,7 @@ enum MoneyArt {
             disc.stroke()
 
             // Face value, centred.
-            let font = Theme.uiRounded(diameter * (d.face.count > 2 ? 0.30 : 0.36), .bold)
+            let font = Theme.uiFont(diameter * (d.face.count > 2 ? 0.30 : 0.36), .bold)
             let text = NSAttributedString(string: d.face, attributes: [
                 .font: font, .foregroundColor: UIColor.black
             ])

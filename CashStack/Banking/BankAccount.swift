@@ -8,9 +8,10 @@ struct Institution: Identifiable, Hashable {
 }
 
 extension Institution {
-    static let thistle = Institution(id: "thistle", name: "Thistle Bank", mark: "T", tint: Color(rgb: 0x7A3BFF))
-    static let kestrel = Institution(id: "kestrel", name: "Kestrel",      mark: "K", tint: Color(rgb: 0xFF2E93))
-    static let aurora  = Institution(id: "aurora",  name: "Aurora",       mark: "A", tint: Color(rgb: 0x00C2FF))
+    static let wattle   = Institution(id: "wattle",   name: "Wattle Bank", mark: "W", tint: Color(rgb: 0x7A3BFF))
+    static let rosella  = Institution(id: "rosella",  name: "Rosella",     mark: "R", tint: Color(rgb: 0xFF2E93))
+    static let meridian = Institution(id: "meridian", name: "Meridian",    mark: "M", tint: Color(rgb: 0x00C2FF))
+    static let boab     = Institution(id: "boab",     name: "Boab",        mark: "B", tint: Color(rgb: 0x16DE7F))
 }
 
 /// An account the wallet has been given access to.
@@ -27,6 +28,7 @@ struct LinkedAccount: Identifiable, Hashable {
 struct PaymentRequest: Identifiable, Equatable {
     let id = UUID()
     let merchant: String
+    let what: String
     let amountMinor: Int
     let reference: String
 }

@@ -71,30 +71,30 @@ enum DemoBanks {
 
     static func sources() -> [BankDataSource] {
         [
-            DemoBankDataSource(institution: .thistle, accounts: [
-                LinkedAccount(id: "thistle-current", institution: .thistle,
-                              nickname: "Current", maskedNumber: "•••• 4417",
-                              availableMinor: 9_642, isIncluded: true)
+            DemoBankDataSource(institution: .wattle, accounts: [
+                LinkedAccount(id: "wattle-everyday", institution: .wattle,
+                              nickname: "Everyday", maskedNumber: "•••• 4417",
+                              availableMinor: 18_740, isIncluded: true)
             ]),
-            DemoBankDataSource(institution: .kestrel, accounts: [
-                LinkedAccount(id: "kestrel-spend", institution: .kestrel,
-                              nickname: "Everyday", maskedNumber: "•••• 9032",
-                              availableMinor: 4_725, isIncluded: true)
+            DemoBankDataSource(institution: .rosella, accounts: [
+                LinkedAccount(id: "rosella-spend", institution: .rosella,
+                              nickname: "Spending", maskedNumber: "•••• 9032",
+                              availableMinor: 10_025, isIncluded: true)
             ], latency: .milliseconds(620)),
-            DemoBankDataSource(institution: .aurora, accounts: [
-                LinkedAccount(id: "aurora-saver", institution: .aurora,
+            DemoBankDataSource(institution: .meridian, accounts: [
+                LinkedAccount(id: "meridian-saver", institution: .meridian,
                               nickname: "Savings", maskedNumber: "•••• 1180",
                               availableMinor: 120_500, isIncluded: false)
             ], latency: .milliseconds(300))
         ]
     }
 
-    static let merchants = [
-        ("Pollen Coffee", 445),
-        ("Tenement Books", 1_295),
-        ("Govan Hardware", 2_340),
-        ("Lane Grocer", 1_768),
-        ("Clyde Cycles", 5_899),
-        ("Riverside Deli", 827)
-    ]
+    /// The institution offered by "Link another bank".
+    static func extraSource() -> BankDataSource {
+        DemoBankDataSource(institution: .boab, accounts: [
+            LinkedAccount(id: "boab-joint", institution: .boab,
+                          nickname: "Joint", maskedNumber: "•••• 7725",
+                          availableMinor: 4_310, isIncluded: true)
+        ])
+    }
 }

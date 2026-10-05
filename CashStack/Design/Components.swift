@@ -1,43 +1,53 @@
 import SwiftUI
 
-/// A holographic sweep for SwiftUI content — the sorted view's equivalent of
-/// the shader running in the physics scene.
-struct HoloSheen: ViewModifier {
-    var delay: Double = 0
-    var active: Bool = true
-    @State private var phase: CGFloat = -1
+/// A still piece of money with the same holographic sweep the physics scene
+/// runs as a shader — a rainbow band travelling diagonally across the face.
+///
+/// The band is composited into its own group before being masked by the
+/// artwork, otherwise the additive blend leaks past the note's edges and the
+/// shine reads as a square sitting on top of the money.
+struct MoneyThumb: View {
+    let denomination: Denomination
+    var height: CGFloat = 34
+    var shimmerDelay: Double = 0
 
-    func body(content: Content) -> some View {
-        content
+    @State private var phase: CGFloat = -1.1
+
+    private var artwork: some View {
+        Image(uiImage: MoneyArt.image(for: denomination))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(height: height)
+    }
+
+    var body: some View {
+        artwork
             .overlay {
                 GeometryReader { geo in
                     LinearGradient(
-                        colors: [.clear,
-                                 Color(rgb: 0xFF2E93).opacity(0.55),
-                                 Color(rgb: 0x00E6FF).opacity(0.75),
-                                 Color(rgb: 0xFFF03D).opacity(0.6),
-                                 .clear],
-                        startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .frame(width: geo.size.width * 0.75)
+                        stops: [
+                            .init(color: .clear, location: 0.00),
+                            .init(color: Color(rgb: 0xFF2E93).opacity(0.55), location: 0.30),
+                            .init(color: Color(rgb: 0xFFFFFF).opacity(0.85), location: 0.50),
+                            .init(color: Color(rgb: 0x00E6FF).opacity(0.60), location: 0.70),
+                            .init(color: .clear, location: 1.00)
+                        ],
+                        startPoint: .leading, endPoint: .trailing)
+                    .frame(width: geo.size.width * 0.55)
                     .rotationEffect(.degrees(18))
                     .offset(x: phase * geo.size.width * 1.6)
                     .blendMode(.plusLighter)
+                    .allowsHitTesting(false)
                 }
-                .allowsHitTesting(false)
             }
-            .mask(content)
+            .compositingGroup()
+            .mask(artwork)
             .onAppear {
-                guard active else { return }
-                withAnimation(.linear(duration: 2.6).delay(delay).repeatForever(autoreverses: false)) {
-                    phase = 1
+                guard phase < 0 else { return }
+                withAnimation(.linear(duration: 2.8).delay(shimmerDelay).repeatForever(autoreverses: false)) {
+                    phase = 1.1
                 }
             }
-    }
-}
-
-extension View {
-    func holoSheen(delay: Double = 0, active: Bool = true) -> some View {
-        modifier(HoloSheen(delay: delay, active: active))
     }
 }
 
@@ -159,19 +169,4 @@ enum WalletMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String { self == .loose ? "Loose" : "Sorted" }
     var symbol: String { self == .loose ? "water.waves" : "list.bullet" }
-}
-
-/// A piece of money drawn as a still image, for the sorted view and receipts.
-struct MoneyThumb: View {
-    let denomination: Denomination
-    var height: CGFloat = 34
-    var shimmerDelay: Double = 0
-
-    var body: some View {
-        Image(uiImage: MoneyArt.image(for: denomination))
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(height: height)
-            .holoSheen(delay: shimmerDelay)
-    }
 }

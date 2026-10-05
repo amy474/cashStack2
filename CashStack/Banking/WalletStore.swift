@@ -21,6 +21,13 @@ final class WalletStore: ObservableObject {
 
     @Published private(set) var request: PaymentRequest?
     @Published private(set) var tenderedMinor: Int = 0
+    /// What has physically been handed over, so cancelling can give it back.
+    private var tenderedPieces: [Denomination] = []
+    private var settlement: Task<Void, Never>?
+
+    /// How long the negative "this is your change" figure is held on screen
+    /// before the payment settles and the change falls back in.
+    static let settleDelay: Duration = .milliseconds(1_100)
     @Published private(set) var lastSettlement: CashTransaction?
     @Published var errorMessage: String?
 
@@ -70,15 +77,18 @@ final class WalletStore: ObservableObject {
 
     var includedAccounts: [LinkedAccount] { accounts.filter(\.isIncluded) }
 
+    /// The headline figure during a payment: what is still owed, counting down
+    /// as money is handed over, and going negative once the merchant has been
+    /// overpaid — at which point it is the change coming back.
     var outstandingMinor: Int {
         guard let request else { return 0 }
-        return max(0, request.amountMinor - tenderedMinor)
+        return request.amountMinor - tenderedMinor
     }
 
-    var changeDueMinor: Int {
-        guard let request else { return 0 }
-        return max(0, tenderedMinor - request.amountMinor)
-    }
+    var isSettling: Bool { outstandingMinor <= 0 && request != nil }
+
+    /// The change on its way back, once the merchant has been overpaid.
+    var changeDueMinor: Int { max(0, -outstandingMinor) }
 
     // MARK: Loading
 
@@ -121,40 +131,52 @@ final class WalletStore: ObservableObject {
     // MARK: Paying
 
     func beginRequest(_ request: PaymentRequest) {
+        settlement?.cancel()
         self.request = request
         tenderedMinor = 0
+        tenderedPieces = []
         lastSettlement = nil
     }
 
+    /// What tapping "Pay at till" does: the till rings up one of its menu items.
     func beginDemoRequest() {
-        let (merchant, amount) = DemoBanks.merchants.randomElement()!
-        beginRequest(PaymentRequest(merchant: merchant,
-                                    amountMinor: amount,
-                                    reference: Self.reference()))
+        beginRequest(DemoTill.ringUp())
     }
 
+    /// Back out. Anything already handed over drops back into the wallet.
     func cancelRequest() {
-        request = nil
+        settlement?.cancel()
+        settlement = nil
+        pile.append(contentsOf: tenderedPieces)
+        tenderedPieces = []
         tenderedMinor = 0
+        request = nil
     }
 
-    enum TenderResult: Equatable {
-        case shortBy(Int)
-        /// Paid. The change is the money that should now fall from the top.
-        case settled(change: [Denomination])
-    }
-
-    /// Hand one note or coin to the merchant.
-    func tender(_ denomination: Denomination) async -> TenderResult {
-        guard let request else { return .shortBy(0) }
+    /// Hand one note or coin to the merchant. Once the amount is covered the
+    /// figure at the top goes negative and sits there for a beat — long enough
+    /// to read as change — before the payment settles. Handing over more in the
+    /// meantime simply pushes it further negative and restarts the beat.
+    func tender(_ denomination: Denomination) {
+        guard request != nil else { return }
         tenderedMinor += denomination.minor
+        tenderedPieces.append(denomination)
         if let index = pile.firstIndex(of: denomination) { pile.remove(at: index) }
 
-        guard tenderedMinor >= request.amountMinor else {
-            return .shortBy(request.amountMinor - tenderedMinor)
+        guard outstandingMinor <= 0 else { return }
+        settlement?.cancel()
+        settlement = Task { [weak self] in
+            try? await Task.sleep(for: WalletStore.settleDelay)
+            guard !Task.isCancelled else { return }
+            await self?.settle()
         }
+    }
 
-        // Settled. The merchant keeps the price; the rest comes back as change.
+    /// Take the money, bank the spend, and hand back the change.
+    func settle() async {
+        guard let request, tenderedMinor >= request.amountMinor else { return }
+        settlement = nil
+
         let changeMinor = tenderedMinor - request.amountMinor
         let debited = await debitIncluded(request.amountMinor)
 
@@ -166,13 +188,14 @@ final class WalletStore: ObservableObject {
                                           accounts: debited)
         history.insert(transaction, at: 0)
         lastSettlement = transaction
-        pile.append(contentsOf: Money.items(ofMinor: changeMinor))
-        // Belt and braces: the pile must always add up to the available balance.
-        if pileMinor != walletMinor { tidyPile() }
+
         self.request = nil
         tenderedMinor = 0
+        tenderedPieces = []
 
-        return .settled(change: Money.items(ofMinor: changeMinor))
+        pile.append(contentsOf: Money.items(ofMinor: changeMinor))
+        // Belt and braces: the pile must always add up to the available balance.
+        if pileMinor != Money.cashable(walletMinor) { tidyPile() }
     }
 
     /// Spread the spend across the included accounts, fullest first.
@@ -202,20 +225,16 @@ final class WalletStore: ObservableObject {
         return touched
     }
 
-    private static func reference() -> String {
-        let letters = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-        return String((0..<2).map { _ in letters.randomElement()! })
-             + String(format: "%04d", Int.random(in: 0...9999))
-    }
-
     // MARK: Demo helpers
 
     /// Put the demo back to its starting state.
     func reset() async {
+        settlement?.cancel()
         sources = DemoBanks.sources()
         history = []
         request = nil
         tenderedMinor = 0
+        tenderedPieces = []
         lastSettlement = nil
         await load()
     }

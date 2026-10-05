@@ -4,9 +4,15 @@ import SwiftUI
 struct SortedView: View {
     @EnvironmentObject private var wallet: WalletStore
 
+    /// Room for the glass bars the list scrolls underneath.
+    var topInset: CGFloat = 0
+    var bottomInset: CGFloat = 0
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                Color.clear.frame(height: topInset)
+
                 if wallet.stacks.isEmpty {
                     EmptyWallet()
                         .padding(.top, 70)
@@ -27,9 +33,11 @@ struct SortedView: View {
                     }
                     TotalRow(total: wallet.pileMinor, pieces: wallet.pieceCount)
                 }
+
+                Color.clear.frame(height: bottomInset)
             }
-            .padding(.bottom, 24)
         }
+        .scrollIndicators(.hidden)
         .background(Theme.ground)
     }
 }
@@ -42,7 +50,7 @@ private struct SectionLabel: View {
         HStack {
             Text(title.uppercased())
                 .accessibilityIdentifier("section-\(title)")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .font(Theme.label(10))
                 .kerning(2)
             Spacer()
             Text(Money.format(minor: value))
