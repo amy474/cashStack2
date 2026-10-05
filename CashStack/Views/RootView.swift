@@ -45,14 +45,14 @@ struct RootView: View {
                     header
                         .frame(height: headerHeight)
                         .padding(.top, safeTop)
-                        .background(GlassChrome(edge: .top))
+                        .background(TopGlass())
 
                     Spacer(minLength: 0)
 
                     footer
                         .frame(height: footerHeight)
                         .padding(.bottom, safeBottom)
-                        .background(GlassChrome(edge: .bottom))
+                        .background(BottomBar())
                 }
                 .ignoresSafeArea()
 
@@ -67,7 +67,8 @@ struct RootView: View {
             .task(id: geo.size) {
                 configureScene()
                 scene.payLineInset = safeTop + headerHeight + 30
-                scene.floorInset = safeBottom + footerHeight - 20
+                // The pile rests on the top edge of the bottom bar.
+                scene.floorInset = safeBottom + footerHeight
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.88), value: wallet.request)
@@ -181,16 +182,23 @@ struct RootView: View {
 
 // MARK: - Glass
 
-/// The frosted bar at the top and bottom. Cash stays visible behind it.
-private struct GlassChrome: View {
-    enum Edge { case top, bottom }
-    let edge: Edge
-
+/// The frosted bar at the top. Cash slides up behind it and stays visible,
+/// which is the whole point of it being glass rather than paint.
+private struct TopGlass: View {
     var body: some View {
-        ZStack(alignment: edge == .top ? .bottom : .top) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Theme.ground.opacity(0.2))
+        ZStack(alignment: .bottom) {
+            Rectangle().fill(.ultraThinMaterial)
+            Hairline()
+        }
+    }
+}
+
+/// The bottom bar is solid — the pile lands on top of it rather than
+/// disappearing underneath.
+private struct BottomBar: View {
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle().fill(Theme.ground)
             Hairline()
         }
     }

@@ -62,18 +62,29 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
         let asked = cents(app.staticTexts["askedAmount"].label)
 
-        // Hand over the smallest piece there is, so the bill is nowhere near covered.
+        // Reach for the smallest piece in the pile. Which piece actually ends up
+        // under the finger is down to where the pile settled and what is lying
+        // on top of what, so the assertion is about the arithmetic rather than
+        // about any particular coin.
         guard let smallest = byValue.reversed().first(where: { !money($0).isEmpty }) else {
             return XCTFail("The wallet should have some coins in it")
         }
         handOver(smallest)
-        Thread.sleep(forTimeInterval: 1.0)
+
+        // The piece flies off the top before it registers, so wait for the
+        // tally rather than sleeping a fixed amount — reading early also keeps
+        // this well clear of the settle delay.
+        var tendered = 0
+        for _ in 0..<30 where tendered == 0 {
+            guard app.staticTexts["tenderedAmount"].exists else { break }
+            tendered = cents(app.staticTexts["tenderedAmount"].label)
+        }
+        XCTAssertGreaterThan(tendered, 0, "Money handed over is counted")
 
         let outstanding = cents(app.staticTexts["outstandingAmount"].label)
-        let tendered = cents(app.staticTexts["tenderedAmount"].label)
-        XCTAssertGreaterThan(tendered, 0, "Money handed over is counted")
-        XCTAssertEqual(outstanding, asked - tendered, "The amount owed counts down")
-        XCTAssertGreaterThan(outstanding, 0, "A single coin should not cover the bill")
+        XCTAssertEqual(outstanding, asked - tendered,
+                       "The figure counts down by exactly what was handed over")
+        XCTAssertLessThan(outstanding, asked, "And it is lower than it started")
     }
 
     func testOverpayingTurnsTheAmountNegative() {

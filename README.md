@@ -44,9 +44,10 @@ $14.95 book with a $20 and you are genuinely carrying $5.05 of change
 afterwards — a $5 and a 5c — until you tap **tidy** (the stack icon, bottom
 left), which re-breaks the balance into the fewest possible pieces.
 
-The top and bottom bars are glass, and the physics world runs the full height of
-the screen behind them — so a note swiped up to pay is still visible through the
-frosted bar rather than disappearing under it.
+The top bar is glass and the physics world runs the full height of the screen
+behind it, so a note swiped up to pay is still visible through the frosted bar
+rather than disappearing under it. The bottom bar is solid and the pile lands on
+its top edge, so nothing in the wallet is ever hidden.
 
 ## How it is put together
 
