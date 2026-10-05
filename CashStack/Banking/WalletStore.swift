@@ -70,6 +70,16 @@ final class WalletStore: ObservableObject {
         stacks.map { "\($0.denomination.minor)x\($0.count)" }.joined(separator: ",")
     }
 
+    /// Swap one piece of money for the same value in smaller pieces. The scene
+    /// has already decided the split is allowed and animated it, so this just
+    /// keeps the wallet's own record in step.
+    func split(_ denomination: Denomination) {
+        let pieces = Money.split(denomination)
+        guard !pieces.isEmpty, let index = pile.firstIndex(of: denomination) else { return }
+        pile.remove(at: index)
+        pile.append(contentsOf: pieces)
+    }
+
     /// Re-break the balance into the fewest possible pieces.
     func tidyPile() {
         pile = Money.items(ofMinor: walletMinor)

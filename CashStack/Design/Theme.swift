@@ -11,6 +11,10 @@ enum Theme {
     static let inkSoft     = Color.black.opacity(0.45)
     static let inkFaint    = Color.black.opacity(0.12)
 
+    /// Money coming back to you. Dark enough to clear 3:1 on white at display
+    /// sizes, bright enough to still read as the green of a hundred.
+    static let credit      = Color(rgb: 0x00A651)
+
     static let uiGround    = UIColor.white
     static let uiInk       = UIColor.black
 

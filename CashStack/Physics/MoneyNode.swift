@@ -29,14 +29,15 @@ final class MoneyNode: SKSpriteNode {
             // A touch smaller than the art so notes nestle instead of hovering.
             body = SKPhysicsBody(rectangleOf: CGSize(width: denomination.size.width - 4,
                                                      height: denomination.size.height - 4))
-            body.mass = 0.016
+            body.mass = denomination.size.width * denomination.size.height * 1.5e-6
             body.restitution = 0.05
             body.linearDamping = 1.5
             body.angularDamping = 1.1
             body.friction = 0.75
         case .coin:
             body = SKPhysicsBody(circleOfRadius: denomination.size.width / 2 - 1.5)
-            body.mass = 0.05
+            let radius = denomination.size.width / 2
+            body.mass = .pi * radius * radius * 4.4e-5
             body.restitution = 0.24
             body.linearDamping = 0.55
             body.angularDamping = 0.5
@@ -92,6 +93,27 @@ final class MoneyNode: SKSpriteNode {
             .removeFromParent(),
             .run(completion)
         ]))
+    }
+
+    /// Broken into smaller money: the piece pops and vanishes.
+    func burst() {
+        physicsBody = nil
+        removeAllActions()
+        run(.sequence([
+            .group([.scale(to: 1.18, duration: 0.08), .fadeOut(withDuration: 0.16)]),
+            .removeFromParent()
+        ]))
+    }
+
+    /// Nothing smaller to break into — a short shake says so.
+    func shrugOff() {
+        removeAction(forKey: "shrug")
+        let shift: CGFloat = 5
+        run(.sequence([
+            .moveBy(x: shift, y: 0, duration: 0.05),
+            .moveBy(x: -shift * 2, y: 0, duration: 0.09),
+            .moveBy(x: shift, y: 0, duration: 0.05)
+        ]), withKey: "shrug")
     }
 
     /// Taken out of the wallet because the balance changed.

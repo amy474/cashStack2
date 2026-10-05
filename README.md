@@ -32,12 +32,13 @@ a timer instead of on tilt.
 |---|---|
 | **Loose** | The physics pile. Every piece of money is a body in a SpriteKit world whose gravity vector is the phone's own. Shake it and the pile jumps. |
 | **Sorted** | The same cash, counted: denomination, count, subtotal, total. For when you need the number, not the feeling. |
+| **Break it up** | Double tap a note or coin and it bursts into the fewest smaller pieces of the same value. A $100 becomes two $50s; a $50 becomes two $20s and a $10. The 5c has nothing to break into, so it just shakes its head. |
 | **Pay** | Tap **Pay at till** and the till rings something up by itself — no menu to choose from. The amount sits at the top and counts down as you hand money over. Press and hold a note, swipe it above the dashed line, let go. It's gone. |
 
-Overpay and the figure at the top goes **negative** — that is your change, and
-it sits there for a beat so you can read it before the payment settles and the
-coins fall back in. Hand over more while it is negative and it simply counts
-further down.
+Overpay and the figure at the top turns **green and goes negative** — that is
+your change, and it sits there for a beat so you can read it before the payment
+settles and the coins fall back in. Hand over more while it is negative and it
+simply counts further down.
 
 The pile is the source of truth, not a freshly-computed breakdown. Pay for a
 $14.95 book with a $20 and you are genuinely carrying $5.05 of change
@@ -68,7 +69,9 @@ CashStack/
 ```
 
 **Design.** White ground, black hairlines at 1pt, Satoshi throughout, bright
-money. The notes and coins are drawn with CoreGraphics at launch and cached, so
+money. The money is drawn big — a note is about half the screen wide — because
+it is meant to be grabbed with a thumb, and every detail in `MoneyArt` is a
+fraction of the note's height so the design holds together at any size. The notes and coins are drawn with CoreGraphics at launch and cached, so
 there is nothing to redraw and nothing to ship.
 
 **Type.** Satoshi ships in `Resources/Fonts` (Light, Regular, Medium, Bold,
@@ -128,7 +131,15 @@ a particular $100 note and swipe it to the top exactly as a person would. The
 suite covers the balance breaking into the right notes and coins, the till
 ringing up an amount by itself, the figure counting down and then going
 negative, settling with change, cancelling and getting your money back, paying
-from the sorted view, and accounts going in and out of the pile.
+from the sorted view, double tapping to break a note into smaller money, and
+accounts going in and out of the pile.
+
+Where the pile settles decides what is lying on top of what, so a test cannot
+assume the piece it reaches for is the piece it gets. The payment tests pick
+whichever piece is lying lowest on screen — clear of the glass header, where a
+tap would land on the chrome instead — and then assert the arithmetic rather
+than naming a note. The splitting test narrows the wallet to a single $100 so
+the piece under the thumb is not in doubt.
 
 `ScreenshotTests` walks the app through every screen and attaches a shot of each.
 
@@ -157,6 +168,9 @@ the financial data the bank connections read.
 
 - No real bank connection, no consent flow, no payment rails — `debit` moves a
   number in memory.
+- Splitting stops at `Money.maxLoosePieces` (120). Without a cap, a determined
+  thumb could turn a hundred dollars into two thousand 5c coins and the physics
+  would grind to a halt.
 - Australian dollars only. `Denomination.all` is the whole catalogue; another
   currency means another list and the breakdown maths works unchanged. Cash
   settles in 5c steps, since Australia withdrew the 1c and 2c — `Money.cashable`

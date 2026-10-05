@@ -104,6 +104,9 @@ struct RootView: View {
         scene.onTender = { denomination in
             Task { @MainActor in wallet.tender(denomination) }
         }
+        scene.onSplit = { denomination in
+            Task { @MainActor in wallet.split(denomination) }
+        }
         scene.sync(to: wallet.stacks, animated: false)
     }
 
@@ -331,12 +334,14 @@ private struct PayHeader: View {
                 .foregroundStyle(Theme.inkSoft)
                 .padding(.top, 12)
 
+            // Green once it goes negative: that figure is money coming back.
             Text(Money.format(minor: outstanding))
                 .accessibilityIdentifier("outstandingAmount")
                 .font(Theme.display(46))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(isOverpaid ? Theme.credit : Theme.ink)
                 .monospacedDigit()
                 .contentTransition(.numericText())
+                .animation(.easeOut(duration: 0.2), value: isOverpaid)
 
             // Hairline track that fills as money is handed over.
             GeometryReader { geo in

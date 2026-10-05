@@ -25,32 +25,33 @@ struct Denomination: Identifiable, Hashable {
 extension Denomination {
 
     // MARK: Notes — all the same height, each one longer than the last,
-    // tinted after the real polymer notes.
+    // tinted after the real polymer notes. Sized generously: this is money you
+    // are meant to grab with a thumb, so a note takes up half the screen.
     static let n100 = Denomination(minor: 10_000, kind: .note, label: "$100", face: "100",
-                                   tint: UIColor(rgb: 0x00D96B), size: CGSize(width: 152, height: 70))
+                                   tint: UIColor(rgb: 0x00D96B), size: CGSize(width: 205, height: 94))
     static let n50  = Denomination(minor:  5_000, kind: .note, label: "$50",  face: "50",
-                                   tint: UIColor(rgb: 0xFFC400), size: CGSize(width: 146, height: 70))
+                                   tint: UIColor(rgb: 0xFFC400), size: CGSize(width: 197, height: 94))
     static let n20  = Denomination(minor:  2_000, kind: .note, label: "$20",  face: "20",
-                                   tint: UIColor(rgb: 0xFF5A36), size: CGSize(width: 140, height: 70))
+                                   tint: UIColor(rgb: 0xFF5A36), size: CGSize(width: 189, height: 94))
     static let n10  = Denomination(minor:  1_000, kind: .note, label: "$10",  face: "10",
-                                   tint: UIColor(rgb: 0x2E7BFF), size: CGSize(width: 134, height: 70))
+                                   tint: UIColor(rgb: 0x2E7BFF), size: CGSize(width: 181, height: 94))
     static let n5   = Denomination(minor:    500, kind: .note, label: "$5",   face: "5",
-                                   tint: UIColor(rgb: 0xFF49C7), size: CGSize(width: 128, height: 70))
+                                   tint: UIColor(rgb: 0xFF49C7), size: CGSize(width: 173, height: 94))
 
     // MARK: Coins — diameters scaled from the real thing, so the 50c is the
     // big one and the $2 is the little one, exactly as in a real pocket.
     static let c200 = Denomination(minor: 200, kind: .coin, label: "$2",  face: "$2",
-                                   tint: UIColor(rgb: 0xFFB000), size: CGSize(width: 38, height: 38))
+                                   tint: UIColor(rgb: 0xFFB000), size: CGSize(width: 51, height: 51))
     static let c100 = Denomination(minor: 100, kind: .coin, label: "$1",  face: "$1",
-                                   tint: UIColor(rgb: 0xFFD400), size: CGSize(width: 46, height: 46))
+                                   tint: UIColor(rgb: 0xFFD400), size: CGSize(width: 62, height: 62))
     static let c50  = Denomination(minor:  50, kind: .coin, label: "50c", face: "50c",
-                                   tint: UIColor(rgb: 0x00E0C2), size: CGSize(width: 58, height: 58))
+                                   tint: UIColor(rgb: 0x00E0C2), size: CGSize(width: 78, height: 78))
     static let c20  = Denomination(minor:  20, kind: .coin, label: "20c", face: "20c",
-                                   tint: UIColor(rgb: 0xB36BFF), size: CGSize(width: 53, height: 53))
+                                   tint: UIColor(rgb: 0xB36BFF), size: CGSize(width: 72, height: 72))
     static let c10  = Denomination(minor:  10, kind: .coin, label: "10c", face: "10c",
-                                   tint: UIColor(rgb: 0x8FE1FF), size: CGSize(width: 44, height: 44))
+                                   tint: UIColor(rgb: 0x8FE1FF), size: CGSize(width: 59, height: 59))
     static let c5   = Denomination(minor:   5, kind: .coin, label: "5c",  face: "5c",
-                                   tint: UIColor(rgb: 0xFF8A5B), size: CGSize(width: 36, height: 36))
+                                   tint: UIColor(rgb: 0xFF8A5B), size: CGSize(width: 49, height: 49))
 
     /// Highest value first — the order every breakdown is computed in.
     static let all: [Denomination] = [n100, n50, n20, n10, n5, c200, c100, c50, c20, c10, c5]
@@ -93,6 +94,25 @@ enum Money {
             }
         }
         return stacks
+    }
+
+    /// Most pieces the loose pile will hold. Splitting stops here, otherwise a
+    /// determined thumb could turn a hundred dollars into two thousand 5c coins.
+    static let maxLoosePieces = 120
+
+    /// Break one piece of money into the fewest pieces of smaller denominations.
+    /// A $100 becomes two $50s; a $50 becomes two $20s and a $10. The smallest
+    /// coin there is cannot be broken down, so it comes back empty.
+    static func split(_ denomination: Denomination) -> [Denomination] {
+        var remaining = denomination.minor
+        var pieces: [Denomination] = []
+        for smaller in Denomination.all where smaller.minor < denomination.minor {
+            while remaining >= smaller.minor {
+                pieces.append(smaller)
+                remaining -= smaller.minor
+            }
+        }
+        return remaining == 0 ? pieces : []
     }
 
     /// Flat list of individual items, biggest first.

@@ -13,5 +13,7 @@ enum Haptics {
     static func tap()     { light.impactOccurred(intensity: 0.7) }
     static func grab()    { medium.impactOccurred(intensity: 0.9) }
     static func arm()     { rigid.impactOccurred(intensity: 0.6) }
+    static func split()   { rigid.impactOccurred(intensity: 1.0) }
+    static func refuse()  { notice.notificationOccurred(.warning) }
     static func success() { notice.notificationOccurred(.success) }
 }

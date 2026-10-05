@@ -4,6 +4,9 @@ import XCTest
 /// handy for App Store shots and for eyeballing the design after a change.
 final class ScreenshotTests: XCTestCase {
 
+    private let notes = ["$100 note", "$50 note", "$20 note", "$10 note", "$5 note"]
+    private let coins = ["$2 coin", "$1 coin", "50c coin", "20c coin", "10c coin", "5c coin"]
+
     func testCaptureEveryScreen() {
         let app = XCUIApplication()
         app.launch()
@@ -22,24 +25,55 @@ final class ScreenshotTests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.5)
         capture("3-asking", app)
 
-        // Pay some of it — the figure counts down.
-        handOver("$5 note", app)
+        // Pay some of it with a coin — the figure counts down.
+        handOverLowest(of: coins, app)
         Thread.sleep(forTimeInterval: 1.2)
         capture("4-part-paid", app)
 
-        // Overpay — the figure goes negative, showing the change due.
-        handOver("$100 note", app)
+        // Overpay with a note — the figure goes negative, showing the change due.
+        handOverLowest(of: notes, app)
         Thread.sleep(forTimeInterval: 0.75)
         capture("5-negative-change", app)
 
         Thread.sleep(forTimeInterval: 1.5)
         capture("6-receipt", app)
-        Thread.sleep(forTimeInterval: 3.5)
+
+        // Whatever the till asked for, make sure it is paid before moving on.
+        for _ in 0..<6 where app.staticTexts["outstandingAmount"].exists {
+            handOverLowest(of: notes + coins, app)
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+
+        Thread.sleep(forTimeInterval: 3.0)
         capture("7-change-landed", app)
 
-        app.buttons["2 of 3"].tap()
+        let accounts = app.buttons["2 of 3"]
+        XCTAssertTrue(accounts.waitForExistence(timeout: 8))
+        accounts.tap()
         Thread.sleep(forTimeInterval: 1.5)
         capture("8-accounts", app)
+    }
+
+    /// Double tap breaks a piece into smaller money, right where it lay.
+    func testCaptureSplit() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
+
+        // Narrow the wallet to one $100 note so the break is easy to read.
+        app.buttons["2 of 3"].tap()
+        app.switches["include-wattle-everyday"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["3 pieces of cash · 1 bank"].waitForExistence(timeout: 6))
+        Thread.sleep(forTimeInterval: 3.0)
+        capture("10-before-split", app)
+
+        let note = app.otherElements
+            .matching(NSPredicate(format: "label == %@", "$100 note")).firstMatch
+        XCTAssertTrue(note.exists)
+        note.doubleTap()
+        Thread.sleep(forTimeInterval: 2.5)
+        capture("11-after-split", app)
     }
 
     /// Catches a note in mid-air, above the pay line and behind the top glass.
@@ -51,9 +85,13 @@ final class ScreenshotTests: XCTestCase {
         app.buttons["Pay at till"].tap()
         Thread.sleep(forTimeInterval: 1.5)
 
-        let piece = app.otherElements
-            .matching(NSPredicate(format: "label == %@", "$50 note")).firstMatch
-        guard piece.exists else { return XCTFail("no $50 note in the pile") }
+        let pieces = notes.flatMap { label in
+            app.otherElements.matching(NSPredicate(format: "label == %@", label))
+                .allElementsBoundByIndex
+        }
+        guard let piece = pieces.max(by: { $0.frame.midY < $1.frame.midY }) else {
+            return XCTFail("no notes in the pile")
+        }
 
         let shot = expectation(description: "mid-swipe")
         DispatchQueue.global().asyncAfter(deadline: .now() + 2.2) {
@@ -71,10 +109,14 @@ final class ScreenshotTests: XCTestCase {
         wait(for: [shot], timeout: 15)
     }
 
-    private func handOver(_ label: String, _ app: XCUIApplication) {
-        let piece = app.otherElements
-            .matching(NSPredicate(format: "label == %@", label)).firstMatch
-        guard piece.exists else { return }
+    /// Swipe up whichever of these is lying lowest on screen — low enough to be
+    /// clear of the glass header, where a tap would land on the chrome instead.
+    private func handOverLowest(of labels: [String], _ app: XCUIApplication) {
+        let pieces = labels.flatMap { label in
+            app.otherElements.matching(NSPredicate(format: "label == %@", label))
+                .allElementsBoundByIndex
+        }
+        guard let piece = pieces.max(by: { $0.frame.midY < $1.frame.midY }) else { return }
         let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.10))
         piece.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.45, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 0.4)

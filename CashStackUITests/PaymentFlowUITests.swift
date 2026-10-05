@@ -7,9 +7,9 @@ final class PaymentFlowUITests: XCTestCase {
 
     private var app: XCUIApplication!
 
-    /// Biggest first — what the tests reach for when handing money over.
-    private let byValue = ["$100 note", "$50 note", "$20 note", "$10 note", "$5 note",
-                           "$2 coin", "$1 coin", "50c coin", "20c coin", "10c coin", "5c coin"]
+    private let notes = ["$100 note", "$50 note", "$20 note", "$10 note", "$5 note"]
+    private let coins = ["$2 coin", "$1 coin", "50c coin", "20c coin", "10c coin", "5c coin"]
+    private var byValue: [String] { notes + coins }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -62,14 +62,15 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
         let asked = cents(app.staticTexts["askedAmount"].label)
 
-        // Reach for the smallest piece in the pile. Which piece actually ends up
-        // under the finger is down to where the pile settled and what is lying
-        // on top of what, so the assertion is about the arithmetic rather than
-        // about any particular coin.
-        guard let smallest = byValue.reversed().first(where: { !money($0).isEmpty }) else {
+        // Reach for a coin lying low in the pile: low enough to be clear of the
+        // glass header, and small enough that it cannot cover the bill. Which
+        // piece actually ends up under the finger is still down to what is
+        // lying on top of what, so the assertions are about the arithmetic
+        // rather than about any particular coin.
+        guard let coin = lowestPiece(of: coins) else {
             return XCTFail("The wallet should have some coins in it")
         }
-        handOver(smallest)
+        handOver(coin)
 
         // The piece flies off the top before it registers, so wait for the
         // tally rather than sleeping a fixed amount — reading early also keeps
@@ -82,9 +83,14 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertGreaterThan(tendered, 0, "Money handed over is counted")
 
         let outstanding = cents(app.staticTexts["outstandingAmount"].label)
-        XCTAssertEqual(outstanding, asked - tendered,
-                       "The figure counts down by exactly what was handed over")
-        XCTAssertLessThan(outstanding, asked, "And it is lower than it started")
+        if tendered < asked {
+            XCTAssertEqual(outstanding, asked - tendered,
+                           "The figure counts down by exactly what was handed over")
+            XCTAssertLessThan(outstanding, asked, "And it is lower than it started")
+        } else {
+            XCTAssertLessThanOrEqual(outstanding, 0,
+                                     "A piece big enough to cover the bill takes it to nothing")
+        }
     }
 
     func testOverpayingTurnsTheAmountNegative() {
@@ -92,21 +98,23 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
         let asked = cents(app.staticTexts["askedAmount"].label)
 
-        // A $100 note covers anything on the till's menu.
-        handOver("$100 note")
+        payOff()
 
-        // The figure goes negative — that is the change on its way back — and
-        // holds there for a beat before the payment settles.
+        // Once the merchant has had more than they asked for, the figure goes
+        // negative — that is the change on its way back — and holds there for a
+        // beat before the payment settles.
         var sawNegative = false
         var seen = 0
+        var tendered = 0
         for _ in 0..<25 where !sawNegative {
-            let label = app.staticTexts["outstandingAmount"]
-            guard label.exists else { break }
-            seen = cents(label.label)
+            let figure = app.staticTexts["outstandingAmount"]
+            guard figure.exists else { break }
+            seen = cents(figure.label)
+            tendered = cents(app.staticTexts["tenderedAmount"].label)
             if seen < 0 { sawNegative = true }
         }
         XCTAssertTrue(sawNegative, "Overpaying should show the change as a negative amount")
-        XCTAssertEqual(seen, asked - 10_000, "Negative figure equals the change due")
+        XCTAssertEqual(seen, asked - tendered, "The negative figure is the change due")
     }
 
     func testPayingSettlesAndTheChangeFallsBackIn() {
@@ -146,7 +154,7 @@ final class PaymentFlowUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.5)
         XCTAssertFalse(money("$100 note").isEmpty,
                        "Paying from the sorted view should switch back to the loose pile")
-        handOver("$100 note")
+        payOff()
         XCTAssertTrue(app.staticTexts["receiptHeadline"].waitForExistence(timeout: 10))
     }
 
@@ -155,15 +163,58 @@ final class PaymentFlowUITests: XCTestCase {
         app.buttons["Pay at till"].tap()
         XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
 
-        handOver("$5 note")
+        guard let piece = lowestPiece(of: byValue) else { return XCTFail("empty wallet") }
+        handOver(piece)
         Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertGreaterThan(cents(app.staticTexts["tenderedAmount"].label), 0,
+                             "Something was handed over")
+
         app.buttons["Cancel payment"].tap()
 
         let balance = app.staticTexts["walletBalance"]
         XCTAssertTrue(balance.waitForExistence(timeout: 5))
         XCTAssertEqual(cents(balance.label), before, "Nothing was spent")
-        Thread.sleep(forTimeInterval: 2.0)
-        XCTAssertFalse(money("$5 note").isEmpty, "The note handed over comes back")
+        XCTAssertTrue(app.staticTexts["10 pieces of cash · 2 banks"].waitForExistence(timeout: 6),
+                      "And every piece is back in the wallet")
+    }
+
+    // MARK: Breaking money up
+
+    func testDoubleTappingBreaksANoteIntoSmallerMoney() {
+        narrowToOneNote()
+
+        // A $100 becomes two $50s.
+        money("$100 note").first!.doubleTap()
+        Thread.sleep(forTimeInterval: 1.8)
+        XCTAssertEqual(money("$100 note").count, 0, "the note is gone")
+        XCTAssertEqual(money("$50 note").count, 2, "and two $50s have taken its place")
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$100.25",
+                       "same money, smaller pieces")
+        XCTAssertTrue(app.staticTexts["4 pieces of cash · 1 bank"].waitForExistence(timeout: 4),
+                      "one piece became two and nothing else was disturbed")
+
+        // A $50 becomes two $20s and a $10.
+        money("$50 note").first!.doubleTap()
+        Thread.sleep(forTimeInterval: 1.8)
+        XCTAssertEqual(money("$50 note").count, 1)
+        XCTAssertEqual(money("$20 note").count, 2)
+        XCTAssertEqual(money("$10 note").count, 1)
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$100.25")
+        XCTAssertTrue(app.staticTexts["6 pieces of cash · 1 bank"].waitForExistence(timeout: 4))
+    }
+
+    /// Cut the wallet down to $100.25 — one $100 note, a 20c and a 5c — so
+    /// whichever piece is under the thumb is not in doubt.
+    private func narrowToOneNote() {
+        app.buttons["2 of 3"].tap()
+        let everyday = app.switches["include-wattle-everyday"]
+        XCTAssertTrue(everyday.waitForExistence(timeout: 5))
+        everyday.tap()
+        app.buttons["Done"].tap()
+
+        XCTAssertTrue(app.staticTexts["3 pieces of cash · 1 bank"].waitForExistence(timeout: 6))
+        Thread.sleep(forTimeInterval: 3.0)
+        XCTAssertEqual(money("$100 note").count, 1)
     }
 
     // MARK: Sorted
@@ -212,12 +263,22 @@ final class PaymentFlowUITests: XCTestCase {
         return label.hasPrefix("−") || label.hasPrefix("-") ? -value : value
     }
 
+    /// The piece lying lowest on screen — well clear of the glass header, where
+    /// a tap would land on the chrome instead of the pile.
+    private func lowestPiece(of labels: [String]) -> XCUIElement? {
+        labels.flatMap { money($0) }.max { $0.frame.midY < $1.frame.midY }
+    }
+
     /// Tap and hold a piece of money, then swipe it to the top of the phone.
     private func handOver(_ label: String) {
         let piece = money(label).first
         XCTAssertNotNil(piece, "Expected a \(label) in the pile")
+        handOver(piece!)
+    }
+
+    private func handOver(_ piece: XCUIElement) {
         let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.10))
-        piece!.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        piece.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.45, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 0.4)
     }
 
@@ -226,7 +287,7 @@ final class PaymentFlowUITests: XCTestCase {
         for _ in 0..<8 {
             let label = app.staticTexts["outstandingAmount"]
             guard label.exists, cents(label.label) > 0 else { return }
-            guard let piece = byValue.first(where: { !money($0).isEmpty }) else { return }
+            guard let piece = lowestPiece(of: notes) ?? lowestPiece(of: coins) else { return }
             handOver(piece)
             Thread.sleep(forTimeInterval: 0.8)
         }
