@@ -33,6 +33,7 @@ a timer instead of on tilt.
 | **Loose** | The physics pile. Every piece of money is a body in a SpriteKit world whose gravity vector is the phone's own. Shake it and the pile jumps. |
 | **Sorted** | The same cash, counted: denomination, count, subtotal, total. For when you need the number, not the feeling. |
 | **Break it up** | Double tap a note or coin and it bursts into the fewest smaller pieces of the same value. A $100 becomes two $50s; a $50 becomes two $20s and a $10. The 5c has nothing to break into, so it just shakes its head. |
+| **One account** | Link as many banks as you like, but the wallet holds one account's money at a time. Pick it from the accounts pill at the top; the pile swaps over to that balance, and that is the account the till takes payment from. |
 | **Pay** | Tap **Pay at till** and the till rings something up by itself — no menu to choose from. The amount sits at the top and counts down as you hand money over. Press and hold a note, swipe it above the dashed line, let go. It's gone. |
 
 Overpay and the figure at the top turns **green and goes negative** — that is
@@ -56,7 +57,7 @@ its top edge, so nothing in the wallet is ever hidden.
 CashStack/
   Model/Denomination.swift     Sterling denominations, sizes, and the breakdown maths
   Banking/BankDataSource.swift The protocol every bank conforms to, plus the demo source
-  Banking/WalletStore.swift    Merges accounts, holds the pile, settles payments
+  Banking/WalletStore.swift    Links accounts, holds the selected one's pile, settles payments
   Physics/CashScene.swift      SpriteKit world: gravity, walls, the pay line, drag-to-pay
   Physics/MoneyNode.swift      One note or coin as a physics body
   Physics/MotionManager.swift  CoreMotion gravity and shake, delivered by closure
@@ -107,8 +108,9 @@ protocol BankDataSource: AnyObject {
 }
 ```
 
-`WalletStore` holds an array of these and merges whatever they return, so
-multi-bank aggregation is just "add another source". To go live, write one
+`WalletStore` holds an array of these and lists every account they return, so
+linking another bank is just "add another source". Only the selected account
+fills the pile and is debited when you pay. To go live, write one
 conforming type per route — an Open Banking AISP (TrueLayer, Plaid, Yapily) or a
 bank's own API — have `connect()` run the consent flow, and pass it to
 `WalletStore.link(_:)`. Nothing else changes. The demo ships three
@@ -132,14 +134,14 @@ suite covers the balance breaking into the right notes and coins, the till
 ringing up an amount by itself, the figure counting down and then going
 negative, settling with change, cancelling and getting your money back, paying
 from the sorted view, double tapping to break a note into smaller money, and
-accounts going in and out of the pile.
+picking which single account fills the pile and pays.
 
 Where the pile settles decides what is lying on top of what, so a test cannot
 assume the piece it reaches for is the piece it gets. The payment tests pick
 whichever piece is lying lowest on screen — clear of the glass header, where a
 tap would land on the chrome instead — and then assert the arithmetic rather
-than naming a note. The splitting test narrows the wallet to a single $100 so
-the piece under the thumb is not in doubt.
+than naming a note. The splitting test switches to an account holding a single
+$100 so the piece under the thumb is not in doubt.
 
 `ScreenshotTests` walks the app through every screen and attaches a shot of each.
 

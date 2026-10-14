@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Multiple banks, one pile. Switching an account off takes its money straight
-/// back out of the wallet.
+/// Multiple banks, one account at a time. Picking an account swaps the pile
+/// over to its money, and that is the account the till takes payment from.
 struct AccountsSheet: View {
     @EnvironmentObject private var wallet: WalletStore
     @Environment(\.dismiss) private var dismiss
@@ -13,7 +13,8 @@ struct AccountsSheet: View {
                 VStack(spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("In your wallet")
+                            Text(wallet.selectedAccount.map { "Paying from \($0.institution.name) \($0.nickname)" }
+                                 ?? "No account selected")
                                 .font(Theme.body(13))
                                 .foregroundStyle(Theme.inkSoft)
                             Text(Money.format(minor: wallet.walletMinor))
@@ -21,14 +22,6 @@ struct AccountsSheet: View {
                                 .monospacedDigit()
                         }
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text("Linked")
-                                .font(Theme.body(13))
-                                .foregroundStyle(Theme.inkSoft)
-                            Text(Money.format(minor: wallet.totalLinkedMinor))
-                                .font(Theme.title(18))
-                                .monospacedDigit()
-                        }
                     }
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 20)
@@ -38,9 +31,11 @@ struct AccountsSheet: View {
                     Hairline()
 
                     ForEach(wallet.accounts) { account in
-                        AccountRow(account: account) { included in
+                        AccountRow(account: account,
+                                   isSelected: account.id == wallet.selectedAccountID) {
+                            Haptics.tap()
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                wallet.setIncluded(included, for: account.id)
+                                wallet.select(account.id)
                             }
                         }
                         Hairline().opacity(0.12)
@@ -112,9 +107,19 @@ struct AccountsSheet: View {
 
 private struct AccountRow: View {
     let account: LinkedAccount
-    var onToggle: (Bool) -> Void
+    let isSelected: Bool
+    var onSelect: () -> Void
 
     var body: some View {
+        Button(action: onSelect) {
+            content
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("select-\(account.id)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var content: some View {
         HStack(spacing: 14) {
             Text(account.institution.mark)
                 .font(Theme.title(15))
@@ -139,16 +144,16 @@ private struct AccountRow: View {
 
             Text(Money.format(minor: account.availableMinor))
                 .font(Theme.title(15))
-                .foregroundStyle(account.isIncluded ? Theme.ink : Theme.inkSoft)
+                .foregroundStyle(isSelected ? Theme.ink : Theme.inkSoft)
                 .monospacedDigit()
 
-            Toggle("", isOn: Binding(get: { account.isIncluded }, set: onToggle))
-                .labelsHidden()
-                .accessibilityIdentifier("include-\(account.id)")
-                .tint(Theme.ink)
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(isSelected ? Theme.ink : Theme.inkSoft)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 }
 
