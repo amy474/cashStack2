@@ -21,8 +21,6 @@ struct LinkedAccount: Identifiable, Hashable {
     let nickname: String
     let maskedNumber: String        // "•••• 4417"
     var availableMinor: Int
-    /// Whether this account's money is in the pile right now.
-    var isIncluded: Bool
 }
 
 struct PaymentRequest: Identifiable, Equatable {

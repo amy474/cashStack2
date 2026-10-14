@@ -74,17 +74,17 @@ enum DemoBanks {
             DemoBankDataSource(institution: .wattle, accounts: [
                 LinkedAccount(id: "wattle-everyday", institution: .wattle,
                               nickname: "Everyday", maskedNumber: "•••• 4417",
-                              availableMinor: 18_740, isIncluded: true)
+                              availableMinor: 18_740)
             ]),
             DemoBankDataSource(institution: .rosella, accounts: [
                 LinkedAccount(id: "rosella-spend", institution: .rosella,
                               nickname: "Spending", maskedNumber: "•••• 9032",
-                              availableMinor: 10_025, isIncluded: true)
+                              availableMinor: 10_025)
             ], latency: .milliseconds(620)),
             DemoBankDataSource(institution: .meridian, accounts: [
                 LinkedAccount(id: "meridian-saver", institution: .meridian,
                               nickname: "Savings", maskedNumber: "•••• 1180",
-                              availableMinor: 120_500, isIncluded: false)
+                              availableMinor: 120_500)
             ], latency: .milliseconds(300))
         ]
     }
@@ -94,7 +94,7 @@ enum DemoBanks {
         DemoBankDataSource(institution: .boab, accounts: [
             LinkedAccount(id: "boab-joint", institution: .boab,
                           nickname: "Joint", maskedNumber: "•••• 7725",
-                          availableMinor: 4_310, isIncluded: true)
+                          availableMinor: 4_310)
         ])
     }
 }

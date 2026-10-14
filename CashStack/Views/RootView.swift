@@ -224,8 +224,8 @@ private struct WalletHeader: View {
                 Spacer()
                 Button(action: onAccounts) {
                     HStack(spacing: 7) {
-                        AccountDots(accounts: wallet.includedAccounts)
-                        Text("\(wallet.includedAccounts.count) of \(wallet.accounts.count)")
+                        AccountDot(account: wallet.selectedAccount)
+                        Text(wallet.selectedAccount?.nickname ?? "Accounts")
                             .font(Theme.body(12))
                             .foregroundStyle(Theme.ink)
                         Image(systemName: "chevron.right")
@@ -238,6 +238,7 @@ private struct WalletHeader: View {
                     .background(PillBackground())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("accountsButton")
             }
             .padding(.top, 6)
 
@@ -249,7 +250,7 @@ private struct WalletHeader: View {
                 .contentTransition(.numericText())
                 .padding(.top, 12)
 
-            Text("\(wallet.pieceCount) pieces of cash · \(wallet.includedAccounts.count) \(wallet.includedAccounts.count == 1 ? "bank" : "banks")")
+            Text("\(wallet.pieceCount) pieces of cash · \(wallet.selectedAccount?.institution.name ?? "no account")")
                 .font(Theme.body(13))
                 .foregroundStyle(Theme.inkSoft)
                 .padding(.top, 2)
@@ -263,22 +264,13 @@ private struct WalletHeader: View {
     }
 }
 
-private struct AccountDots: View {
-    let accounts: [LinkedAccount]
+private struct AccountDot: View {
+    let account: LinkedAccount?
     var body: some View {
-        HStack(spacing: -5) {
-            ForEach(accounts.prefix(3)) { account in
-                Circle()
-                    .fill(account.institution.tint)
-                    .frame(width: 13, height: 13)
-                    .overlay(Circle().strokeBorder(Theme.ink, lineWidth: Theme.hairline))
-            }
-            if accounts.isEmpty {
-                Circle()
-                    .strokeBorder(Theme.ink, lineWidth: Theme.hairline)
-                    .frame(width: 13, height: 13)
-            }
-        }
+        Circle()
+            .fill(account?.institution.tint ?? .clear)
+            .frame(width: 13, height: 13)
+            .overlay(Circle().strokeBorder(Theme.ink, lineWidth: Theme.hairline))
     }
 }
 

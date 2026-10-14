@@ -9,7 +9,6 @@ final class PaymentFlowUITests: XCTestCase {
 
     private let notes = ["$100 note", "$50 note", "$20 note", "$10 note", "$5 note"]
     private let coins = ["$2 coin", "$1 coin", "50c coin", "20c coin", "10c coin", "5c coin"]
-    private var byValue: [String] { notes + coins }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -22,21 +21,21 @@ final class PaymentFlowUITests: XCTestCase {
 
     // MARK: The wallet
 
-    func testWalletLoadsWithCashFromEveryIncludedBank() {
+    func testWalletShowsOnlyTheSelectedAccount() {
         let balance = app.staticTexts["walletBalance"]
         XCTAssertTrue(balance.waitForExistence(timeout: 10))
-        XCTAssertEqual(balance.label, "$287.65", "Two demo accounts added together")
-        XCTAssertTrue(app.staticTexts["10 pieces of cash · 2 banks"].exists)
+        XCTAssertEqual(balance.label, "$187.40", "Just Wattle Everyday, nothing added on")
+        XCTAssertTrue(app.staticTexts["8 pieces of cash · Wattle Bank"].exists)
     }
 
     func testTheBalanceIsBrokenIntoRealAustralianCash() {
-        // $287.65 = 2x$100 + $50 + $20 + $10 + $5 + $2 + 50c + 10c + 5c
-        XCTAssertEqual(money("$100 note").count, 2)
+        // $187.40 = $100 + $50 + $20 + $10 + $5 + $2 + 2x20c
+        XCTAssertEqual(money("$100 note").count, 1)
         XCTAssertEqual(money("$50 note").count, 1)
         XCTAssertEqual(money("$20 note").count, 1)
         XCTAssertEqual(money("$5 note").count, 1)
-        XCTAssertEqual(money("50c coin").count, 1)
-        XCTAssertEqual(money("5c coin").count, 1)
+        XCTAssertEqual(money("20c coin").count, 2)
+        XCTAssertEqual(money("5c coin").count, 0)
         XCTAssertEqual(money("1c coin").count, 0, "Australia has no 1c piece")
         XCTAssertEqual(money("2c coin").count, 0, "Australia has no 2c piece")
     }
@@ -133,7 +132,7 @@ final class PaymentFlowUITests: XCTestCase {
         let balance = app.staticTexts["walletBalance"]
         XCTAssertTrue(balance.waitForExistence(timeout: 6))
         XCTAssertEqual(cents(balance.label), before - asked,
-                       "The spend comes off the linked accounts")
+                       "The spend comes off the selected account")
 
         // The change physically arrives: the pile still adds up to the balance.
         Thread.sleep(forTimeInterval: 3.5)
@@ -163,7 +162,11 @@ final class PaymentFlowUITests: XCTestCase {
         app.buttons["Pay at till"].tap()
         XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
 
-        guard let piece = lowestPiece(of: byValue) else { return XCTFail("empty wallet") }
+        // A coin with no note lying across it, so what gets picked up cannot
+        // cover the bill and settle it before the cancel.
+        guard let piece = lowestUncoveredPiece(of: coins) ?? lowestPiece(of: coins) else {
+            return XCTFail("empty wallet")
+        }
         handOver(piece)
         Thread.sleep(forTimeInterval: 1.0)
         XCTAssertGreaterThan(cents(app.staticTexts["tenderedAmount"].label), 0,
@@ -174,7 +177,7 @@ final class PaymentFlowUITests: XCTestCase {
         let balance = app.staticTexts["walletBalance"]
         XCTAssertTrue(balance.waitForExistence(timeout: 5))
         XCTAssertEqual(cents(balance.label), before, "Nothing was spent")
-        XCTAssertTrue(app.staticTexts["10 pieces of cash · 2 banks"].waitForExistence(timeout: 6),
+        XCTAssertTrue(app.staticTexts["8 pieces of cash · Wattle Bank"].waitForExistence(timeout: 6),
                       "And every piece is back in the wallet")
     }
 
@@ -190,7 +193,7 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertEqual(money("$50 note").count, 2, "and two $50s have taken its place")
         XCTAssertEqual(app.staticTexts["walletBalance"].label, "$100.25",
                        "same money, smaller pieces")
-        XCTAssertTrue(app.staticTexts["4 pieces of cash · 1 bank"].waitForExistence(timeout: 4),
+        XCTAssertTrue(app.staticTexts["4 pieces of cash · Rosella"].waitForExistence(timeout: 4),
                       "one piece became two and nothing else was disturbed")
 
         // A $50 becomes two $20s and a $10.
@@ -200,19 +203,14 @@ final class PaymentFlowUITests: XCTestCase {
         XCTAssertEqual(money("$20 note").count, 2)
         XCTAssertEqual(money("$10 note").count, 1)
         XCTAssertEqual(app.staticTexts["walletBalance"].label, "$100.25")
-        XCTAssertTrue(app.staticTexts["6 pieces of cash · 1 bank"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["6 pieces of cash · Rosella"].waitForExistence(timeout: 4))
     }
 
-    /// Cut the wallet down to $100.25 — one $100 note, a 20c and a 5c — so
+    /// Switch to Rosella Spending, $100.25 — one $100 note, a 20c and a 5c — so
     /// whichever piece is under the thumb is not in doubt.
     private func narrowToOneNote() {
-        app.buttons["2 of 3"].tap()
-        let everyday = app.switches["include-wattle-everyday"]
-        XCTAssertTrue(everyday.waitForExistence(timeout: 5))
-        everyday.tap()
-        app.buttons["Done"].tap()
-
-        XCTAssertTrue(app.staticTexts["3 pieces of cash · 1 bank"].waitForExistence(timeout: 6))
+        selectAccount("rosella-spend")
+        XCTAssertTrue(app.staticTexts["3 pieces of cash · Rosella"].waitForExistence(timeout: 6))
         Thread.sleep(forTimeInterval: 3.0)
         XCTAssertEqual(money("$100 note").count, 1)
     }
@@ -222,36 +220,86 @@ final class PaymentFlowUITests: XCTestCase {
     func testSortedViewCountsTheSameCash() {
         app.buttons["Sorted"].tap()
         XCTAssertTrue(app.staticTexts["sortedTotal"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["sortedTotal"].label, "$287.65")
-        XCTAssertEqual(app.staticTexts["sortedPieces"].label, "10 pieces")
+        XCTAssertEqual(app.staticTexts["sortedTotal"].label, "$187.40")
+        XCTAssertEqual(app.staticTexts["sortedPieces"].label, "8 pieces")
         XCTAssertTrue(app.staticTexts["section-Notes"].exists)
         XCTAssertTrue(app.staticTexts["section-Coins"].exists)
     }
 
     // MARK: Accounts
 
-    func testTurningOffAnAccountTakesItsCashOutOfTheWallet() {
-        app.buttons["2 of 3"].tap()
-        let everyday = app.switches["include-wattle-everyday"]
-        XCTAssertTrue(everyday.waitForExistence(timeout: 5))
-
-        everyday.tap()
-        app.buttons["Done"].tap()
+    func testPickingAnotherAccountSwapsThePileOver() {
+        selectAccount("rosella-spend")
 
         let balance = app.staticTexts["walletBalance"]
         XCTAssertTrue(balance.waitForExistence(timeout: 5))
-        XCTAssertEqual(balance.label, "$100.25", "Only the remaining bank's cash is in the pile")
+        XCTAssertEqual(balance.label, "$100.25", "Only the selected account's cash is in the pile")
+        XCTAssertTrue(app.staticTexts["3 pieces of cash · Rosella"].waitForExistence(timeout: 6))
     }
 
-    func testLinkingAnotherBankAddsItsCashToTheSamePile() {
-        app.buttons["2 of 3"].tap()
-        app.buttons["Link another bank"].tap()
-        XCTAssertTrue(app.staticTexts["$330.75"].waitForExistence(timeout: 10),
-                      "A fourth institution's balance merges into the wallet")
+    func testOnlyOneAccountIsSelectedAtATime() {
+        app.buttons["accountsButton"].tap()
+        let everyday = app.buttons["select-wattle-everyday"]
+        let spending = app.buttons["select-rosella-spend"]
+        let savings = app.buttons["select-meridian-saver"]
+        XCTAssertTrue(everyday.waitForExistence(timeout: 5))
+        XCTAssertTrue(everyday.isSelected)
+        XCTAssertFalse(spending.isSelected)
+        XCTAssertFalse(savings.isSelected)
+
+        savings.tap()
+        XCTAssertTrue(savings.isSelected)
+        XCTAssertFalse(everyday.isSelected, "Picking one account lets go of the other")
+        XCTAssertFalse(spending.isSelected)
         app.buttons["Done"].tap()
+
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$1,205.00")
+    }
+
+    func testPayingOnlyDebitsTheSelectedAccount() {
+        selectAccount("rosella-spend")
+        Thread.sleep(forTimeInterval: 3.0)
+
+        app.buttons["Pay at till"].tap()
+        XCTAssertTrue(app.staticTexts["outstandingAmount"].waitForExistence(timeout: 5))
+        let asked = cents(app.staticTexts["askedAmount"].label)
+        payOff()
+
+        // Wait for the wallet header to come back rather than the receipt,
+        // which may already have been and gone if it took a few swipes.
+        let balance = app.staticTexts["walletBalance"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 10), "The payment settles")
+        XCTAssertEqual(cents(balance.label), 10_025 - asked, "Rosella paid")
+
+        // Wattle Everyday was not selected, so it is untouched.
+        selectAccount("wattle-everyday")
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$187.40")
+    }
+
+    func testLinkingAnotherBankLeavesTheSelectionAlone() {
+        app.buttons["accountsButton"].tap()
+        app.buttons["Link another bank"].tap()
+        let joint = app.buttons["select-boab-joint"]
+        XCTAssertTrue(joint.waitForExistence(timeout: 10), "A fourth institution is offered")
+        XCTAssertFalse(joint.isSelected)
+        app.buttons["Done"].tap()
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$187.40",
+                       "Linking does not add the new bank's money to the pile")
+
+        selectAccount("boab-joint")
+        XCTAssertEqual(app.staticTexts["walletBalance"].label, "$43.10")
     }
 
     // MARK: Helpers
+
+    /// Open the accounts sheet, pick one, and close it again.
+    private func selectAccount(_ id: String) {
+        app.buttons["accountsButton"].tap()
+        let row = app.buttons["select-\(id)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        app.buttons["Done"].tap()
+    }
 
     private func money(_ label: String) -> [XCUIElement] {
         app.otherElements.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
@@ -267,6 +315,18 @@ final class PaymentFlowUITests: XCTestCase {
     /// a tap would land on the chrome instead of the pile.
     private func lowestPiece(of labels: [String]) -> XCUIElement? {
         labels.flatMap { money($0) }.max { $0.frame.midY < $1.frame.midY }
+    }
+
+    /// The lowest of these pieces that no note is lying across, so a thumb on
+    /// it picks up that piece and not a note sitting on top of it.
+    private func lowestUncoveredPiece(of labels: [String]) -> XCUIElement? {
+        let noteFrames = notes.flatMap { money($0) }.map(\.frame)
+        return labels.flatMap { money($0) }
+            .filter { piece in
+                let centre = CGPoint(x: piece.frame.midX, y: piece.frame.midY)
+                return !noteFrames.contains { $0.contains(centre) }
+            }
+            .max { $0.frame.midY < $1.frame.midY }
     }
 
     /// Tap and hold a piece of money, then swipe it to the top of the phone.

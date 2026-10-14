@@ -139,7 +139,7 @@ private struct EmptyWallet: View {
                 .font(.system(size: 26, weight: .light))
             Text("No cash in the wallet")
                 .font(Theme.title(16))
-            Text("Switch on an account to fill it")
+            Text("Pick another account to fill it")
                 .font(Theme.body(13))
                 .foregroundStyle(Theme.inkSoft)
         }

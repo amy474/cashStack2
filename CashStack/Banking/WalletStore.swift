@@ -1,7 +1,9 @@
 import SwiftUI
 import Combine
 
-/// The wallet: every linked bank merged into one pile of cash.
+/// The wallet: one linked account at a time, shown as a pile of cash. Several
+/// banks can be linked, but only the selected account's money is in the pile
+/// and only that account is debited when you pay.
 @MainActor
 final class WalletStore: ObservableObject {
 
@@ -12,6 +14,8 @@ final class WalletStore: ObservableObject {
 
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var accounts: [LinkedAccount] = []
+    /// The one account whose money is in the pile and pays at the till.
+    @Published private(set) var selectedAccountID: String?
     @Published private(set) var history: [CashTransaction] = []
 
     /// The actual pieces of money in the wallet right now. This is the source of
@@ -39,14 +43,12 @@ final class WalletStore: ObservableObject {
 
     // MARK: Derived
 
-    /// What is in the pile: every included account added together.
-    var walletMinor: Int {
-        accounts.filter(\.isIncluded).reduce(0) { $0 + $1.availableMinor }
+    var selectedAccount: LinkedAccount? {
+        accounts.first { $0.id == selectedAccountID }
     }
 
-    var totalLinkedMinor: Int {
-        accounts.reduce(0) { $0 + $1.availableMinor }
-    }
+    /// What is in the pile: the selected account's available balance.
+    var walletMinor: Int { selectedAccount?.availableMinor ?? 0 }
 
     /// The pile grouped by denomination, biggest first — what the sorted view
     /// and the physics scene both read.
@@ -85,8 +87,6 @@ final class WalletStore: ObservableObject {
         pile = Money.items(ofMinor: walletMinor)
     }
 
-    var includedAccounts: [LinkedAccount] { accounts.filter(\.isIncluded) }
-
     /// The headline figure during a payment: what is still owed, counting down
     /// as money is handed over, and going negative once the merchant has been
     /// overpaid — at which point it is the change coming back.
@@ -114,6 +114,9 @@ final class WalletStore: ObservableObject {
             }
         }
         accounts = merged.sorted { $0.availableMinor > $1.availableMinor }
+        // Keep the account the user picked; otherwise start with the first
+        // bank's account rather than whichever happens to hold the most.
+        if selectedAccount == nil { selectedAccountID = merged.first?.id }
         tidyPile()
         phase = .ready
     }
@@ -132,9 +135,12 @@ final class WalletStore: ObservableObject {
         }
     }
 
-    func setIncluded(_ included: Bool, for accountID: String) {
-        guard let index = accounts.firstIndex(where: { $0.id == accountID }) else { return }
-        accounts[index].isIncluded = included
+    /// Swap the pile over to another account. Not allowed mid-payment: the
+    /// money already handed over came out of the account that was selected.
+    func select(_ accountID: String) {
+        guard request == nil, accountID != selectedAccountID,
+              accounts.contains(where: { $0.id == accountID }) else { return }
+        selectedAccountID = accountID
         tidyPile()
     }
 
@@ -188,7 +194,7 @@ final class WalletStore: ObservableObject {
         settlement = nil
 
         let changeMinor = tenderedMinor - request.amountMinor
-        let debited = await debitIncluded(request.amountMinor)
+        let debited = await debitSelected(request.amountMinor)
 
         let transaction = CashTransaction(merchant: request.merchant,
                                           amountMinor: request.amountMinor,
@@ -208,31 +214,23 @@ final class WalletStore: ObservableObject {
         if pileMinor != Money.cashable(walletMinor) { tidyPile() }
     }
 
-    /// Spread the spend across the included accounts, fullest first.
-    private func debitIncluded(_ minor: Int) async -> [String] {
-        var remaining = minor
-        var touched: [String] = []
+    /// Take the spend from the selected account — the only one whose money
+    /// was in the pile to hand over.
+    private func debitSelected(_ minor: Int) async -> [String] {
+        guard let account = selectedAccount, minor > 0 else { return [] }
 
-        for account in accounts.filter(\.isIncluded).sorted(by: { $0.availableMinor > $1.availableMinor }) {
-            guard remaining > 0 else { break }
-            let take = min(remaining, account.availableMinor)
-            guard take > 0 else { continue }
-
-            if let source = sources.first(where: { $0.institution.id == account.institution.id }) {
-                do {
-                    try await source.debit(accountID: account.id, minor: take)
-                } catch {
-                    errorMessage = error.localizedDescription
-                    continue
-                }
+        if let source = sources.first(where: { $0.institution.id == account.institution.id }) {
+            do {
+                try await source.debit(accountID: account.id, minor: minor)
+            } catch {
+                errorMessage = error.localizedDescription
+                return []
             }
-            if let index = accounts.firstIndex(where: { $0.id == account.id }) {
-                accounts[index].availableMinor -= take
-            }
-            touched.append("\(account.institution.name) \(account.nickname)")
-            remaining -= take
         }
-        return touched
+        if let index = accounts.firstIndex(where: { $0.id == account.id }) {
+            accounts[index].availableMinor -= minor
+        }
+        return ["\(account.institution.name) \(account.nickname)"]
     }
 
     // MARK: Demo helpers
@@ -241,6 +239,7 @@ final class WalletStore: ObservableObject {
     func reset() async {
         settlement?.cancel()
         sources = DemoBanks.sources()
+        selectedAccountID = nil
         history = []
         request = nil
         tenderedMinor = 0

@@ -47,7 +47,7 @@ final class ScreenshotTests: XCTestCase {
         Thread.sleep(forTimeInterval: 3.0)
         capture("7-change-landed", app)
 
-        let accounts = app.buttons["2 of 3"]
+        let accounts = app.buttons["accountsButton"]
         XCTAssertTrue(accounts.waitForExistence(timeout: 8))
         accounts.tap()
         Thread.sleep(forTimeInterval: 1.5)
@@ -60,11 +60,11 @@ final class ScreenshotTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
 
-        // Narrow the wallet to one $100 note so the break is easy to read.
-        app.buttons["2 of 3"].tap()
-        app.switches["include-wattle-everyday"].tap()
+        // Switch to an account holding one $100 note so the break is easy to read.
+        app.buttons["accountsButton"].tap()
+        app.buttons["select-rosella-spend"].tap()
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["3 pieces of cash · 1 bank"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["3 pieces of cash · Rosella"].waitForExistence(timeout: 6))
         Thread.sleep(forTimeInterval: 3.0)
         capture("10-before-split", app)
 
