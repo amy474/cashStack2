@@ -7,6 +7,9 @@ struct SortedView: View {
     /// Room for the glass bars the list scrolls underneath.
     var topInset: CGFloat = 0
     var bottomInset: CGFloat = 0
+    /// Put one of a row's pieces in a jar — the same jars as dragging, for
+    /// anyone who would rather not, or cannot, drag.
+    var onPutInJar: (Denomination, CoinJar) -> Void = { _, _ in }
 
     var body: some View {
         ScrollView {
@@ -20,14 +23,14 @@ struct SortedView: View {
                     if !wallet.notes.isEmpty {
                         SectionLabel(title: "Notes", value: wallet.notes.reduce(0) { $0 + $1.subtotalMinor })
                         ForEach(Array(wallet.notes.enumerated()), id: \.element.id) { index, stack in
-                            StackRow(stack: stack, shimmerDelay: Double(index) * 0.18)
+                            StackRow(stack: stack, shimmerDelay: Double(index) * 0.18, onPutInJar: onPutInJar)
                             Hairline().opacity(0.12)
                         }
                     }
                     if !wallet.coins.isEmpty {
                         SectionLabel(title: "Coins", value: wallet.coins.reduce(0) { $0 + $1.subtotalMinor })
                         ForEach(Array(wallet.coins.enumerated()), id: \.element.id) { index, stack in
-                            StackRow(stack: stack, shimmerDelay: Double(index) * 0.18 + 0.4)
+                            StackRow(stack: stack, shimmerDelay: Double(index) * 0.18 + 0.4, onPutInJar: onPutInJar)
                             Hairline().opacity(0.12)
                         }
                     }
@@ -65,8 +68,10 @@ private struct SectionLabel: View {
 }
 
 private struct StackRow: View {
+    @EnvironmentObject private var wallet: WalletStore
     let stack: MoneyStack
     let shimmerDelay: Double
+    var onPutInJar: (Denomination, CoinJar) -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -96,9 +101,42 @@ private struct StackRow: View {
                 .foregroundStyle(Theme.ink)
                 .monospacedDigit()
                 .frame(width: 86, alignment: .trailing)
+
+            if wallet.jarsTake(stack.denomination) {
+                jarMenu
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 11)
+    }
+
+    private var jarMenu: some View {
+        let piece = stack.denomination
+        return Menu {
+            Section("Put one \(piece.label) in a jar") {
+                ForEach(wallet.visibleJars) { jar in
+                    let refusal = wallet.refusal(jar, for: piece)
+                    Button {
+                        onPutInJar(piece, jar)
+                    } label: {
+                        Text(jar.title)
+                        Text(refusal ?? wallet.destination(of: jar) ?? jar.choosePrompt)
+                        Image(systemName: jar.symbol)
+                    }
+                    .disabled(refusal != nil)
+                    .accessibilityIdentifier("menu-\(jar.rawValue)")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 32, height: 32)
+                .background(PillBackground())
+                .contentShape(Circle())
+        }
+        .accessibilityIdentifier("jarMenu-\(piece.label)")
+        .accessibilityLabel("Put a \(piece.label) in a jar")
     }
 }
 

@@ -29,6 +29,8 @@ struct PaymentRequest: Identifiable, Equatable {
     let what: String
     let amountMinor: Int
     let reference: String
+    /// Cafés and the like put a tip jar out; a hardware store does not.
+    var acceptsTips = false
 }
 
 struct CashTransaction: Identifiable {
@@ -39,4 +41,11 @@ struct CashTransaction: Identifiable {
     let changeMinor: Int
     let date: Date
     let accounts: [String]
+    /// The account that paid, so a tip from the change comes out of the same one.
+    var accountID: String?
+    var acceptsTips = false
+    /// Coins dropped in the tip jar, while paying or from the change after.
+    var tipPieces: [Denomination] = []
+
+    var tipMinor: Int { tipPieces.reduce(0) { $0 + $1.minor } }
 }

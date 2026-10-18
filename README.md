@@ -35,6 +35,8 @@ a timer instead of on tilt.
 | **Break it up** | Double tap a note or coin and it bursts into the fewest smaller pieces of the same value. A $100 becomes two $50s; a $50 becomes two $20s and a $10. The 5c has nothing to break into, so it just shakes its head. |
 | **One account** | Link as many banks as you like, but the wallet holds one account's money at a time. Pick it from the accounts pill at the top; the pile swaps over to that balance, and that is the account the till takes payment from. |
 | **Pay** | Tap **Pay at till** and the till rings something up by itself — no menu to choose from. The amount sits at the top and counts down as you hand money over. Press and hold a note, swipe it above the dashed line, let go. It's gone. |
+| **Jars** | Pick up a coin and the header turns into three jars: **Invest**, **Donate**, **Save**. Drag the coin into one and let go. Let go anywhere else and it drops back in the pile. |
+| **Tip jar** | At a café, a tip jar sits beside the amount while you pay, and stays on the receipt for a few seconds afterwards so some of your change can go straight in. |
 
 Overpay and the figure at the top turns **green and goes negative** — that is
 your change, and it sits there for a beat so you can read it before the payment
@@ -51,6 +53,57 @@ behind it, so a note swiped up to pay is still visible through the frosted bar
 rather than disappearing under it. The bottom bar is solid and the pile lands on
 its top edge, so nothing in the wallet is ever hidden.
 
+## Spare change
+
+Coins are the money nobody quite knows what to do with, so the wallet gives
+them somewhere to go. Everything below works the same way as paying: hold a
+piece, drag it somewhere, let go.
+
+**The jars appear only when you pick up a coin.** The header swaps from your
+balance to three big drop targets, dashed while they wait and solid black when
+a coin is over one — the same armed look as the pay pill. Each jar says where
+its money goes and how much has gone in this month, and the header says how much
+of today's limit is left. A one-off hint under the header explains this until
+the first coin goes in, because a feature that only appears on touch is
+otherwise invisible.
+
+**Nothing is chosen for you.** A jar with nowhere to send money still takes the
+coin, then asks: "What should your $2 buy?" Pick a fund and the coin goes in;
+tap **Put it back** and it falls back into the pile. After that, coins just
+drop. Destinations can be changed any time under **Jars**.
+
+| Jar | Where it goes | What actually happens |
+|---|---|---|
+| **Invest** | An ETF or a share you pick | Pooled and bought as fractional units at the next market open, so 5c buys a sliver. The picker carries a general-advice warning. |
+| **Donate** | A charity you pick | Pooled and sent on the 1st as one gift, so it clears the $2 threshold for a tax-deductible receipt. |
+| **Save** | One of your other linked accounts | Moved straight across. The account the wallet is paying from is never offered. |
+
+**Every drop can be taken back.** A toast says what happened and what happens
+next ("Buys at the next market open") with **Undo**, for eight seconds, and the
+**Recent** list under **Jars** offers **Take back** for longer. Invested and
+donated coins sit in a pool until the market opens or the 1st comes round, so
+taking them back is honest.
+
+**Guard rails, all in the Jars sheet.** Jars take **coins only** by default — a
+$100 note in the wrong jar is a much worse mistake than a 20c coin, and a note
+can be broken into coins with a double tap anyway. A **daily limit** across
+jars ($10 by default) stops a fidgety thumb emptying the wallet; a coin over the
+limit bounces back with a warning buzz and the jar says why. Each jar can be
+switched off.
+
+**Tipping is opt-in and never nags.** Only places that take tips put a jar out,
+there are no suggested percentages and nothing is pre-filled. A tip goes **on
+top of the bill**, never towards it, so the figure counting down is still the
+bill; cancel the payment and the tip comes back too. After paying, the receipt
+holds the tip jar out for eight seconds with a draining line and a close button,
+because the real-world moment to tip is when the change lands. The countdown
+pauses while a coin is in your hand, and with VoiceOver on it waits to be
+closed. **Most I'll tip per payment** ($5 by default) caps it.
+
+**Dragging is not the only way.** Tap either tip jar to pick a coin from a list,
+and in the **Sorted** view every coin row has a menu that puts one in a jar. The
+jar cards, tip jar and toast are all labelled for VoiceOver.
+
 ## How it is put together
 
 ```
@@ -62,6 +115,9 @@ CashStack/
   Physics/MoneyNode.swift      One note or coin as a physics body
   Physics/MotionManager.swift  CoreMotion gravity and shake, delivered by closure
   Banking/DemoTill.swift       The merchant side: a short menu, rung up at random
+  SpareChange/SpareChange.swift  The jars, the funds and charities, the settings
+  SpareChange/JarViews.swift     Jar header, tip jar, undo toast, first-run hint
+  SpareChange/SpareChangeSheet.swift  Jars settings and the destination pickers
   Design/MoneyArt.swift        The notes and coins, drawn at runtime — no image assets
   Design/HoloShine.swift       The holographic shader
   Design/Fonts.swift           Registers Satoshi at launch
@@ -105,6 +161,7 @@ protocol BankDataSource: AnyObject {
     func connect() async throws
     func accounts() async throws -> [LinkedAccount]
     func debit(accountID: String, minor: Int) async throws
+    func credit(accountID: String, minor: Int) async throws
 }
 ```
 
@@ -143,6 +200,12 @@ tap would land on the chrome instead — and then assert the arithmetic rather
 than naming a note. The splitting test switches to an account holding a single
 $100 so the piece under the thumb is not in doubt.
 
+`CoinJarUITests` covers spare change: a jar asking where its money goes on the
+first coin and going straight in after that, undo, notes kept out of the jars,
+saving from the sorted view's menu, and a tip both while paying and from the
+change. The app takes `-till "Pocket Coffee"` as a launch argument to pin the
+till to a café, so there is always a tip jar to test against.
+
 `ScreenshotTests` walks the app through every screen and attaches a shot of each.
 
 > If a test fails in a way that makes no sense, delete the app off the simulator
@@ -177,6 +240,9 @@ the financial data the bank connections read.
   currency means another list and the breakdown maths works unchanged. Cash
   settles in 5c steps, since Australia withdrew the 1c and 2c — `Money.cashable`
   is what keeps the pile and the balance honest about that.
-- Nothing is persisted. Relaunching resets the wallet.
+- Nothing is persisted. Relaunching resets the wallet, the jars and their
+  settings.
+- The funds and charities are made up, like the banks. Investing and donating
+  stop at the pool: there is no broker or charity on the other end.
 - Very large balances mean very many notes. A real build would bundle them
   above some count rather than simulating three hundred bodies.

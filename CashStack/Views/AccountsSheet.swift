@@ -166,17 +166,25 @@ private struct HistoryRow: View {
                 Text(transaction.merchant)
                     .font(Theme.title(14))
                     .foregroundStyle(Theme.ink)
-                Text("\(transaction.date.formatted(date: .omitted, time: .shortened)) · handed over \(Money.format(minor: transaction.tenderedMinor)) · change \(Money.format(minor: transaction.changeMinor))")
+                Text(detail)
                     .font(Theme.body(11))
                     .foregroundStyle(Theme.inkSoft)
             }
             Spacer(minLength: 6)
-            Text("−" + Money.format(minor: transaction.amountMinor))
+            Text("−" + Money.format(minor: transaction.amountMinor + transaction.tipMinor))
                 .font(Theme.title(14))
                 .foregroundStyle(Theme.ink)
                 .monospacedDigit()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+    }
+
+    private var detail: String {
+        var parts = [transaction.date.formatted(date: .omitted, time: .shortened),
+                     "handed over \(Money.format(minor: transaction.tenderedMinor))",
+                     "change \(Money.format(minor: transaction.changeMinor))"]
+        if transaction.tipMinor > 0 { parts.append("tip \(Money.format(minor: transaction.tipMinor))") }
+        return parts.joined(separator: " · ")
     }
 }

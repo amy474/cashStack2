@@ -9,25 +9,30 @@ enum DemoTill {
         let merchant: String
         let what: String
         let amountMinor: Int
+        var acceptsTips = false
     }
 
     /// Every amount is a multiple of 5c — Australia settles cash in 5c steps,
     /// so anything else could not be paid or given back as change.
     static let menu: [Item] = [
-        Item(merchant: "Pocket Coffee",    what: "Two flat whites",      amountMinor: 1_040),
+        Item(merchant: "Pocket Coffee",    what: "Two flat whites",      amountMinor: 1_040, acceptsTips: true),
         Item(merchant: "Paperbark Books",  what: "Paperback",            amountMinor: 1_495),
         Item(merchant: "Rozelle Hardware", what: "Timber and screws",    amountMinor: 2_340),
         Item(merchant: "Lane Grocer",      what: "Weekly shop",          amountMinor: 1_765),
-        Item(merchant: "Harbour Cycles",   what: "Tyres fitted",         amountMinor: 5_895),
-        Item(merchant: "Riverside Deli",   what: "Lunch",                amountMinor:   825)
+        Item(merchant: "Harbour Cycles",   what: "Tyres fitted",         amountMinor: 5_895, acceptsTips: true),
+        Item(merchant: "Riverside Deli",   what: "Lunch",                amountMinor:   825, acceptsTips: true)
     ]
 
     static func ringUp() -> PaymentRequest {
-        let item = menu.randomElement()!
-        return PaymentRequest(merchant: item.merchant,
-                              what: item.what,
-                              amountMinor: item.amountMinor,
-                              reference: reference())
+        ringUp(menu.randomElement()!)
+    }
+
+    static func ringUp(_ item: Item) -> PaymentRequest {
+        PaymentRequest(merchant: item.merchant,
+                       what: item.what,
+                       amountMinor: item.amountMinor,
+                       reference: reference(),
+                       acceptsTips: item.acceptsTips)
     }
 
     private static func reference() -> String {

@@ -16,6 +16,9 @@ protocol BankDataSource: AnyObject {
     func accounts() async throws -> [LinkedAccount]
     /// Reduce the available balance after money has been handed over.
     func debit(accountID: String, minor: Int) async throws
+    /// Add to the available balance — a coin saved into this account, or one
+    /// taken back out of a jar.
+    func credit(accountID: String, minor: Int) async throws
 }
 
 enum BankError: LocalizedError {
@@ -64,6 +67,13 @@ final class DemoBankDataSource: BankDataSource {
         }
         guard seeded[index].availableMinor >= minor else { throw BankError.insufficientFunds }
         seeded[index].availableMinor -= minor
+    }
+
+    func credit(accountID: String, minor: Int) async throws {
+        guard let index = seeded.firstIndex(where: { $0.id == accountID }) else {
+            throw BankError.unknownAccount
+        }
+        seeded[index].availableMinor += minor
     }
 }
 
