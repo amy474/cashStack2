@@ -35,6 +35,19 @@ final class WalletStore: ObservableObject {
     @Published private(set) var lastSettlement: CashTransaction?
     @Published var errorMessage: String?
 
+    /// Where spare change goes and how much of it may. Edited in place by the
+    /// settings sheet.
+    @Published var spareChange = SpareChangeSettings()
+    /// Every piece that has gone in a jar, newest first. Undoing one removes it.
+    @Published private(set) var drops: [JarDrop] = []
+    /// The drop the undo toast is offering to take back.
+    @Published private(set) var lastDrop: JarDrop?
+
+    /// Coins in the tip jar for the payment in progress. Kept apart from what
+    /// was handed over: the bill is the bill, and the tip is on top of it.
+    @Published private(set) var tipPieces: [Denomination] = []
+    var tipMinor: Int { tipPieces.reduce(0) { $0 + $1.minor } }
+
     private var sources: [BankDataSource]
 
     init(sources: [BankDataSource] = DemoBanks.sources()) {
@@ -151,20 +164,30 @@ final class WalletStore: ObservableObject {
         self.request = request
         tenderedMinor = 0
         tenderedPieces = []
+        tipPieces = []
         lastSettlement = nil
     }
 
     /// What tapping "Pay at till" does: the till rings up one of its menu items.
+    /// UI tests can pin it to one merchant with `-till "Pocket Coffee"`.
     func beginDemoRequest() {
-        beginRequest(DemoTill.ringUp())
+        if let name = UserDefaults.standard.string(forKey: "till"),
+           let item = DemoTill.menu.first(where: { $0.merchant == name }) {
+            beginRequest(DemoTill.ringUp(item))
+        } else {
+            beginRequest(DemoTill.ringUp())
+        }
     }
 
-    /// Back out. Anything already handed over drops back into the wallet.
+    /// Back out. Anything already handed over, and anything in the tip jar,
+    /// drops back into the wallet.
     func cancelRequest() {
         settlement?.cancel()
         settlement = nil
         pile.append(contentsOf: tenderedPieces)
+        pile.append(contentsOf: tipPieces)
         tenderedPieces = []
+        tipPieces = []
         tenderedMinor = 0
         request = nil
     }
@@ -188,26 +211,32 @@ final class WalletStore: ObservableObject {
         }
     }
 
-    /// Take the money, bank the spend, and hand back the change.
+    /// Take the money and the tip, bank the spend, and hand back the change.
     func settle() async {
         guard let request, tenderedMinor >= request.amountMinor else { return }
         settlement = nil
 
         let changeMinor = tenderedMinor - request.amountMinor
-        let debited = await debitSelected(request.amountMinor)
+        let tips = tipPieces
+        let payer = selectedAccountID
+        let debited = await debitSelected(request.amountMinor + tips.reduce(0) { $0 + $1.minor })
 
         let transaction = CashTransaction(merchant: request.merchant,
                                           amountMinor: request.amountMinor,
                                           tenderedMinor: tenderedMinor,
                                           changeMinor: changeMinor,
                                           date: Date(),
-                                          accounts: debited)
+                                          accounts: debited,
+                                          accountID: payer,
+                                          acceptsTips: request.acceptsTips,
+                                          tipPieces: tips)
         history.insert(transaction, at: 0)
         lastSettlement = transaction
 
         self.request = nil
         tenderedMinor = 0
         tenderedPieces = []
+        tipPieces = []
 
         pile.append(contentsOf: Money.items(ofMinor: changeMinor))
         // Belt and braces: the pile must always add up to the available balance.
@@ -233,6 +262,194 @@ final class WalletStore: ObservableObject {
         return ["\(account.institution.name) \(account.nickname)"]
     }
 
+    // MARK: Spare change — the jars
+
+    /// The jars that come out when a piece is picked up, in order.
+    var visibleJars: [CoinJar] {
+        CoinJar.allCases.filter { !spareChange.hiddenJars.contains($0) }
+    }
+
+    /// Whether picking this piece up should bring the jars out at all.
+    func jarsTake(_ denomination: Denomination) -> Bool {
+        !visibleJars.isEmpty && (denomination.kind == .coin || spareChange.notesAllowed)
+    }
+
+    var savingsAccount: LinkedAccount? {
+        accounts.first { $0.id == spareChange.savingsAccountID }
+    }
+
+    /// Where a jar's money goes, once one has been chosen.
+    func destination(of jar: CoinJar) -> String? {
+        switch jar {
+        case .invest: spareChange.investment?.ticker
+        case .donate: spareChange.charity?.name
+        case .save:   savingsAccount.map { "\($0.institution.name) \($0.nickname)" }
+        }
+    }
+
+    /// Why this jar will not take that piece right now, or nil if it will. A
+    /// jar with nowhere to send money yet still takes it — it asks where first.
+    func refusal(_ jar: CoinJar, for denomination: Denomination?) -> String? {
+        if jar == .save, let savings = spareChange.savingsAccountID, savings == selectedAccountID {
+            return "You're paying from it"
+        }
+        guard let denomination else { return nil }
+        if denomination.kind == .note && !spareChange.notesAllowed { return "Coins only" }
+        if let left = jarAllowanceLeftMinor, denomination.minor > left {
+            return left < Money.smallestPiece ? "Daily limit reached"
+                                              : "Only \(Money.formatShort(minor: left)) left today"
+        }
+        return nil
+    }
+
+    var droppedTodayMinor: Int {
+        drops.filter { Calendar.current.isDateInToday($0.date) }
+             .reduce(0) { $0 + $1.denomination.minor }
+    }
+
+    /// What can still go in the jars today, or nil when there is no limit.
+    var jarAllowanceLeftMinor: Int? {
+        spareChange.dailyLimitMinor.map { max(0, $0 - droppedTodayMinor) }
+    }
+
+    /// This month's total for one jar, for the jar faces and the settings sheet.
+    func monthTotal(_ jar: CoinJar) -> Int {
+        drops.filter { $0.jar == jar && Calendar.current.isDate($0.date, equalTo: Date(), toGranularity: .month) }
+             .reduce(0) { $0 + $1.denomination.minor }
+    }
+
+    /// Drop one piece in a jar: out of the pile, off the selected account and,
+    /// when saving, into the savings account. False if the jar refused it.
+    @discardableResult
+    func drop(_ denomination: Denomination, into jar: CoinJar) -> Bool {
+        guard refusal(jar, for: denomination) == nil,
+              let destination = destination(of: jar),
+              let from = selectedAccountID,
+              takeFromPile(denomination) else { return false }
+
+        let to = jar == .save ? spareChange.savingsAccountID : nil
+        post(denomination.minor, to: from, debit: true)
+        if let to { post(denomination.minor, to: to, debit: false) }
+
+        let drop = JarDrop(jar: jar, denomination: denomination, destination: destination,
+                           fromAccountID: from, toAccountID: to, date: Date())
+        drops.insert(drop, at: 0)
+        lastDrop = drop
+        return true
+    }
+
+    /// Take a piece back out of a jar. Invested and donated coins wait in a
+    /// pool until the market opens or the 1st comes round, so until then
+    /// they can still come home.
+    func undo(_ drop: JarDrop) {
+        guard let index = drops.firstIndex(where: { $0.id == drop.id }) else { return }
+        drops.remove(at: index)
+        if lastDrop?.id == drop.id { lastDrop = nil }
+
+        post(drop.denomination.minor, to: drop.fromAccountID, debit: false)
+        if let to = drop.toAccountID { post(drop.denomination.minor, to: to, debit: true) }
+        if drop.fromAccountID == selectedAccountID { pile.append(drop.denomination) }
+        if pileMinor != Money.cashable(walletMinor) { tidyPile() }
+    }
+
+    func dismissLastDrop() {
+        lastDrop = nil
+    }
+
+    // MARK: Spare change — tipping
+
+    /// Why the tip jar will not take that piece, or nil if it will.
+    func tipRefusal(for denomination: Denomination, alreadyTipped: Int) -> String? {
+        if denomination.kind == .note && !spareChange.notesAllowed { return "Coins only" }
+        if let cap = spareChange.tipCapMinor, alreadyTipped + denomination.minor > cap {
+            return alreadyTipped + Money.smallestPiece > cap ? "Tip limit reached"
+                                                             : "Over your \(Money.formatShort(minor: cap)) limit"
+        }
+        return nil
+    }
+
+    /// The tip jar is out while paying, at places that take tips.
+    var showsTipJarWhilePaying: Bool {
+        request?.acceptsTips == true && spareChange.tipWhilePaying
+    }
+
+    /// Drop a coin in the tip jar while paying. It does not count towards the
+    /// bill, and is taken along with it when the payment settles.
+    @discardableResult
+    func tip(_ denomination: Denomination) -> Bool {
+        guard showsTipJarWhilePaying,
+              tipRefusal(for: denomination, alreadyTipped: tipMinor) == nil,
+              takeFromPile(denomination) else { return false }
+        tipPieces.append(denomination)
+        return true
+    }
+
+    /// Take the last coin back out of the tip jar before the payment settles.
+    func takeBackTip() {
+        guard let last = tipPieces.popLast() else { return }
+        pile.append(last)
+    }
+
+    /// Whether a settled payment's receipt holds the tip jar out, so some of
+    /// the change can go straight back in it.
+    func offersTipFromChange(_ transaction: CashTransaction) -> Bool {
+        transaction.acceptsTips && spareChange.tipFromChange
+            && transaction.accountID != nil && transaction.accountID == selectedAccountID
+    }
+
+    /// Drop a coin from the change in the tip jar, after the payment settled.
+    @discardableResult
+    func tip(_ denomination: Denomination, after transactionID: CashTransaction.ID) -> Bool {
+        guard let index = history.firstIndex(where: { $0.id == transactionID }),
+              offersTipFromChange(history[index]),
+              let account = history[index].accountID,
+              tipRefusal(for: denomination, alreadyTipped: history[index].tipMinor) == nil,
+              takeFromPile(denomination) else { return false }
+        post(denomination.minor, to: account, debit: true)
+        history[index].tipPieces.append(denomination)
+        return true
+    }
+
+    /// Take the last tip back off a settled payment while its receipt is up.
+    func takeBackTip(after transactionID: CashTransaction.ID) {
+        guard let index = history.firstIndex(where: { $0.id == transactionID }),
+              let account = history[index].accountID,
+              let last = history[index].tipPieces.popLast() else { return }
+        post(last.minor, to: account, debit: false)
+        if account == selectedAccountID { pile.append(last) }
+        if pileMinor != Money.cashable(walletMinor) { tidyPile() }
+    }
+
+    func transaction(_ id: CashTransaction.ID?) -> CashTransaction? {
+        history.first { $0.id == id }
+    }
+
+    // MARK: Spare change — moving money
+
+    /// One piece of this denomination out of the pile, if there is one.
+    private func takeFromPile(_ denomination: Denomination) -> Bool {
+        guard let index = pile.firstIndex(of: denomination) else { return false }
+        pile.remove(at: index)
+        return true
+    }
+
+    /// Move a balance straight away, so the pile and the figure at the top
+    /// stay in step, then tell the account's bank.
+    private func post(_ minor: Int, to accountID: String, debit: Bool) {
+        guard minor > 0, let index = accounts.firstIndex(where: { $0.id == accountID }) else { return }
+        accounts[index].availableMinor += debit ? -minor : minor
+        let institution = accounts[index].institution.id
+        guard let source = sources.first(where: { $0.institution.id == institution }) else { return }
+        Task {
+            do {
+                if debit { try await source.debit(accountID: accountID, minor: minor) }
+                else     { try await source.credit(accountID: accountID, minor: minor) }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     // MARK: Demo helpers
 
     /// Put the demo back to its starting state.
@@ -244,7 +461,11 @@ final class WalletStore: ObservableObject {
         request = nil
         tenderedMinor = 0
         tenderedPieces = []
+        tipPieces = []
         lastSettlement = nil
+        spareChange = SpareChangeSettings()
+        drops = []
+        lastDrop = nil
         await load()
     }
 }

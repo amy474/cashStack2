@@ -109,6 +109,71 @@ final class ScreenshotTests: XCTestCase {
         wait(for: [shot], timeout: 15)
     }
 
+    /// Spare change: the jars as a coin is held over them, the jar asking where
+    /// its money goes, the undo toast, the settings, and both tip jars.
+    func testCaptureCoinJars() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-till", "Pocket Coffee"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
+        Thread.sleep(forTimeInterval: 3.0)
+        capture("12-jar-hint", app)
+
+        // Hold a coin over the invest jar and catch it there.
+        let jarY = app.buttons["jarsButton"].frame.midY + 103
+        let investX = 18 + (app.frame.width - 56) / 6
+        let shot = expectation(description: "over-the-jar")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.4) {
+            let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            image.name = "13-coin-over-jar"
+            image.lifetime = .keepAlways
+            self.add(image)
+            shot.fulfill()
+        }
+        lowest(of: coins, app)?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.45,
+                   thenDragTo: app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: investX, dy: jarY)),
+                   withVelocity: .slow, thenHoldForDuration: 2.5)
+        wait(for: [shot], timeout: 15)
+
+        XCTAssertTrue(app.buttons["pick-OZ200"].waitForExistence(timeout: 5))
+        capture("14-choose-a-fund", app)
+        app.buttons["pick-OZ200"].tap()
+        XCTAssertTrue(app.staticTexts["dropReceipt"].waitForExistence(timeout: 5))
+        capture("15-undo-toast", app)
+
+        app.buttons["jarsButton"].tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        capture("16-jar-settings", app)
+        app.buttons["Done"].tap()
+        Thread.sleep(forTimeInterval: 1.0)
+
+        app.buttons["Pay at till"].tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        let tipJar = app.buttons["tipJar"]
+        lowest(of: coins, app)?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.45, thenDragTo: tipJar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)),
+                   withVelocity: .slow, thenHoldForDuration: 0.4)
+        Thread.sleep(forTimeInterval: 1.0)
+        capture("17-tip-while-paying", app)
+
+        // Hand over notes until the bill is covered and the receipt comes up.
+        for _ in 0..<6 where !app.staticTexts["receiptHeadline"].exists {
+            guard app.staticTexts["outstandingAmount"].exists else { break }
+            handOverLowest(of: notes, app)
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+        XCTAssertTrue(app.staticTexts["receiptHeadline"].waitForExistence(timeout: 10))
+        capture("18-tip-from-change", app)
+    }
+
+    private func lowest(of labels: [String], _ app: XCUIApplication) -> XCUIElement? {
+        labels.flatMap { label in
+            app.otherElements.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
+        }
+        .max(by: { $0.frame.midY < $1.frame.midY })
+    }
+
     /// Swipe up whichever of these is lying lowest on screen — low enough to be
     /// clear of the glass header, where a tap would land on the chrome instead.
     private func handOverLowest(of labels: [String], _ app: XCUIApplication) {

@@ -3,17 +3,37 @@ import SpriteKit
 
 struct RootView: View {
     @EnvironmentObject private var wallet: WalletStore
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     @State private var scene = CashScene()
     @State private var mode: WalletMode = .loose
     @State private var showAccounts = false
-    @State private var receipt: CashTransaction?
+    @State private var showSpareChange = false
     @State private var armed = false
     @State private var sceneReady = false
 
-    /// Both headers are the same height, so the pay line never has to move.
+    // The receipt, and how long it stays up.
+    @State private var receiptID: CashTransaction.ID?
+    @State private var receiptCloses = Date.distantPast
+    @State private var receiptTimer: Task<Void, Never>?
+
+    // Jars.
+    /// The piece in the hand right now.
+    @State private var held: Denomination?
+    @State private var hoveredTarget: String?
+    /// The jar that just took a piece, kept on screen a beat so you see it land.
+    @State private var landed: CoinJar?
+    @State private var lingerTask: Task<Void, Never>?
+    /// A jar that needs telling where its money goes.
+    @State private var setup: JarSetup?
+    @State private var tipChooserOpen = false
+    @State private var coachDismissed = false
+
+    /// Every header is the same height, so the pay line never has to move.
     private let headerHeight: CGFloat = 194
     private let footerHeight: CGFloat = 92
+    /// How long the receipt holds the tip jar out for some change.
+    private static let tipWindow: TimeInterval = 8
 
     var body: some View {
         GeometryReader { geo in
@@ -32,7 +52,8 @@ struct RootView: View {
 
                 if mode == .sorted {
                     SortedView(topInset: safeTop + headerHeight + 14,
-                               bottomInset: safeBottom + footerHeight + 14)
+                               bottomInset: safeBottom + footerHeight + 14,
+                               onPutInJar: putInJar)
                         .ignoresSafeArea()
                         .transition(.opacity)
                 }
@@ -46,6 +67,7 @@ struct RootView: View {
                         .frame(height: headerHeight)
                         .padding(.top, safeTop)
                         .background(TopGlass())
+                        .animation(.easeInOut(duration: 0.18), value: showsJars)
 
                     Spacer(minLength: 0)
 
@@ -56,13 +78,13 @@ struct RootView: View {
                 }
                 .ignoresSafeArea()
 
-                if let receipt {
-                    ReceiptCard(transaction: receipt)
-                        .padding(.horizontal, 18)
-                        .padding(.top, safeTop + headerHeight + 14)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(3)
-                }
+                banner
+                    .padding(.horizontal, 18)
+                    .padding(.top, safeTop + headerHeight + 14)
+                    .zIndex(3)
+            }
+            .onPreferenceChange(DropTargetFrames.self) { frames in
+                scene.dropTargets = frames.map { CashScene.DropTarget(id: $0.key, frame: $0.value) }
             }
             .task(id: geo.size) {
                 configureScene()
@@ -72,8 +94,33 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.88), value: wallet.request)
-        .animation(.easeInOut(duration: 0.22), value: receipt?.id)
+        .animation(.easeInOut(duration: 0.22), value: receiptID)
+        .animation(.easeInOut(duration: 0.22), value: wallet.lastDrop?.id)
+        .animation(.easeInOut(duration: 0.22), value: showsCoachMark)
         .sheet(isPresented: $showAccounts) { AccountsSheet() }
+        .sheet(isPresented: $showSpareChange) { SpareChangeSheet() }
+        .sheet(item: $setup, onDismiss: {
+            // "Put it back": the coin that was waiting falls back into the pile.
+            scene.sync(to: wallet.stacks)
+        }) { setup in
+            JarSetupSheet(setup: setup) { finishSetup(setup) }
+        }
+        .confirmationDialog("Drop a coin in the tip jar", isPresented: $tipChooserOpen,
+                            titleVisibility: .visible) {
+            ForEach(tippableCoins) { coin in
+                Button("Tip \(coin.label)") { tipByTap(coin) }
+            }
+            if let last = lastTip {
+                Button("Take back the \(last.label)", role: .destructive) { takeBackTip() }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(tipChooserMessage)
+        }
+        .onChange(of: tipChooserOpen) { _, open in
+            guard receiptOffersTip else { return }
+            if open { receiptCloses = .distantFuture } else { holdReceiptOpen() }
+        }
         .task {
             if wallet.phase == .loading { await wallet.load() }
         }
@@ -86,11 +133,14 @@ struct RootView: View {
         .onChange(of: wallet.lastSettlement?.id) { _, _ in
             guard let settlement = wallet.lastSettlement else { return }
             Haptics.success()
-            receipt = settlement
-            Task {
-                try? await Task.sleep(for: .seconds(3.2))
-                if receipt?.id == settlement.id { receipt = nil }
-            }
+            showReceipt(settlement)
+        }
+        .task(id: wallet.lastDrop?.id) {
+            // The undo toast steps aside after eight seconds — unless VoiceOver
+            // is reading it, in which case it stays until it is dealt with.
+            guard let drop = wallet.lastDrop, !voiceOver else { return }
+            try? await Task.sleep(for: .seconds(8))
+            if wallet.lastDrop?.id == drop.id { wallet.dismissLastDrop() }
         }
     }
 
@@ -107,6 +157,11 @@ struct RootView: View {
         scene.onSplit = { denomination in
             Task { @MainActor in wallet.split(denomination) }
         }
+        scene.onGrab = { grabbed($0) }
+        scene.onLetGo = { _ in letGo() }
+        scene.onHoverTarget = { hoveredTarget = $0 }
+        scene.canDrop = { canDrop($0, into: $1) }
+        scene.onDrop = { dropped($0, into: $1) }
         scene.sync(to: wallet.stacks, animated: false)
     }
 
@@ -129,10 +184,222 @@ struct RootView: View {
                           Haptics.tap()
                           wallet.cancelRequest()
                           scene.isPaymentActive = false
-                      })
+                      }) {
+                if wallet.showsTipJarWhilePaying {
+                    TipJarButton(tipMinor: wallet.tipMinor,
+                                 isHovered: hoveredTarget == TipJar.target,
+                                 refusal: held.flatMap { wallet.tipRefusal(for: $0, alreadyTipped: wallet.tipMinor) }) {
+                        tipChooserOpen = true
+                    }
+                }
+            }
+        } else if showsJars {
+            JarHeader(held: held, hovered: hoveredTarget, landed: landed)
+                .transition(.opacity)
         } else {
-            WalletHeader(mode: $mode, onAccounts: { showAccounts = true })
+            WalletHeader(mode: $mode,
+                         onAccounts: { showAccounts = true },
+                         onJars: { showSpareChange = true })
+                .transition(.opacity)
         }
+    }
+
+    // MARK: Under the header: receipt, undo, first-run hint
+
+    @ViewBuilder private var banner: some View {
+        if let receipt = wallet.transaction(receiptID) {
+            ReceiptCard(transaction: receipt,
+                        tipping: receiptOffersTip ? .init(
+                            isHovered: hoveredTarget == TipJar.target,
+                            refusal: held.flatMap { wallet.tipRefusal(for: $0, alreadyTipped: receipt.tipMinor) },
+                            closes: receiptCloses,
+                            duration: Self.tipWindow) : nil,
+                        onTipJar: { tipChooserOpen = true },
+                        onClose: closeReceipt)
+                // A receipt holding the tip jar fades in rather than sliding:
+                // the jar measures where it is as it appears, and mid-slide it
+                // would tell the scene it is somewhere above the screen.
+                .transition(receiptOffersTip ? .opacity : .move(edge: .top).combined(with: .opacity))
+        } else if let drop = wallet.lastDrop {
+            DropToast(drop: drop) {
+                withAnimation(.easeInOut(duration: 0.2)) { wallet.undo(drop) }
+            }
+            .id(drop.id)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        } else if showsCoachMark {
+            JarCoachMark { coachDismissed = true }
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private var showsCoachMark: Bool {
+        !coachDismissed && wallet.drops.isEmpty && wallet.phase == .ready && mode == .loose
+            && wallet.request == nil && held == nil && landed == nil
+            && !wallet.visibleJars.isEmpty && !wallet.coins.isEmpty
+    }
+
+    // MARK: Jars
+
+    /// The header turns into jars while a coin is in the hand — and stays a
+    /// beat after one goes in, so you see it land.
+    private var showsJars: Bool {
+        guard wallet.request == nil, mode == .loose, !receiptOffersTip else { return false }
+        if let held { return wallet.jarsTake(held) }
+        return landed != nil
+    }
+
+    private func grabbed(_ denomination: Denomination) {
+        held = denomination
+        lingerTask?.cancel()
+        landed = nil
+        // Nobody should lose the tip jar while a coin is on its way to it.
+        if receiptOffersTip { receiptCloses = .distantFuture }
+    }
+
+    private func letGo() {
+        held = nil
+        if receiptOffersTip { holdReceiptOpen() }
+    }
+
+    private func canDrop(_ denomination: Denomination, into target: String) -> Bool {
+        if target == TipJar.target {
+            if wallet.request != nil {
+                return wallet.showsTipJarWhilePaying
+                    && wallet.tipRefusal(for: denomination, alreadyTipped: wallet.tipMinor) == nil
+            }
+            guard let receipt = wallet.transaction(receiptID), wallet.offersTipFromChange(receipt) else {
+                return false
+            }
+            return wallet.tipRefusal(for: denomination, alreadyTipped: receipt.tipMinor) == nil
+        }
+        guard showsJars, let jar = CoinJar(rawValue: target) else { return false }
+        return wallet.refusal(jar, for: denomination) == nil
+    }
+
+    private func dropped(_ denomination: Denomination, into target: String) {
+        var took = false
+        if target == TipJar.target {
+            if wallet.request != nil {
+                took = wallet.tip(denomination)
+            } else if let receiptID {
+                took = wallet.tip(denomination, after: receiptID)
+            }
+        } else if let jar = CoinJar(rawValue: target) {
+            landed = jar
+            linger()
+            if wallet.destination(of: jar) == nil {
+                // Nowhere to send it yet: ask now, and keep the coin until then.
+                setup = JarSetup(jar: jar, pending: denomination)
+                return
+            }
+            took = wallet.drop(denomination, into: jar)
+            if took { coachDismissed = true }
+        }
+        // The scene has already let go of the piece. If the wallet would not
+        // take it after all, it falls back into the pile.
+        if !took { scene.sync(to: wallet.stacks) }
+    }
+
+    private func linger() {
+        lingerTask?.cancel()
+        lingerTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            landed = nil
+        }
+    }
+
+    /// The sorted view's way in: no dragging, same jars.
+    private func putInJar(_ denomination: Denomination, _ jar: CoinJar) {
+        if wallet.destination(of: jar) == nil {
+            setup = JarSetup(jar: jar, pending: denomination)
+        } else if wallet.drop(denomination, into: jar) {
+            Haptics.drop()
+            coachDismissed = true
+        }
+    }
+
+    private func finishSetup(_ setup: JarSetup) {
+        if let pending = setup.pending, wallet.drop(pending, into: setup.jar) {
+            Haptics.drop()
+            coachDismissed = true
+        }
+        self.setup = nil
+    }
+
+    // MARK: Tipping by tap
+
+    /// The tip so far on whatever the tip jar belongs to right now.
+    private var tipSoFar: [Denomination] {
+        if wallet.request != nil { return wallet.tipPieces }
+        return wallet.transaction(receiptID)?.tipPieces ?? []
+    }
+
+    private var lastTip: Denomination? { tipSoFar.last }
+
+    /// One of each coin in the pile that the tip jar would take.
+    private var tippableCoins: [Denomination] {
+        let already = tipSoFar.reduce(0) { $0 + $1.minor }
+        return wallet.stacks.map(\.denomination).filter {
+            wallet.tipRefusal(for: $0, alreadyTipped: already) == nil
+        }
+    }
+
+    private var tipChooserMessage: String {
+        let merchant = wallet.request?.merchant ?? wallet.transaction(receiptID)?.merchant ?? "them"
+        let already = tipSoFar.reduce(0) { $0 + $1.minor }
+        if already > 0 { return "\(Money.format(minor: already)) in the jar for \(merchant) so far." }
+        return tippableCoins.isEmpty ? "No coins that fit under your tip limit."
+                                     : "Optional. It goes to \(merchant) on top of the bill."
+    }
+
+    private func tipByTap(_ coin: Denomination) {
+        let took = wallet.request != nil ? wallet.tip(coin)
+                                         : receiptID.map { wallet.tip(coin, after: $0) } ?? false
+        if took { Haptics.drop() }
+    }
+
+    private func takeBackTip() {
+        if wallet.request != nil {
+            wallet.takeBackTip()
+        } else if let receiptID {
+            wallet.takeBackTip(after: receiptID)
+        }
+    }
+
+    // MARK: Receipt
+
+    private var receiptOffersTip: Bool {
+        wallet.transaction(receiptID).map(wallet.offersTipFromChange) ?? false
+    }
+
+    private func showReceipt(_ transaction: CashTransaction) {
+        receiptID = transaction.id
+        let seconds = wallet.offersTipFromChange(transaction) ? Self.tipWindow : 3.2
+        receiptCloses = Date().addingTimeInterval(seconds)
+        if voiceOver && wallet.offersTipFromChange(transaction) { receiptCloses = .distantFuture }
+
+        receiptTimer?.cancel()
+        let id = transaction.id
+        receiptTimer = Task { @MainActor in
+            // The deadline moves while the tip jar is in use, so keep checking it.
+            while !Task.isCancelled, receiptCloses.timeIntervalSinceNow > 0 {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard !Task.isCancelled, receiptID == id else { return }
+            receiptID = nil
+        }
+    }
+
+    /// Start the tip jar's countdown again from the top.
+    private func holdReceiptOpen() {
+        receiptCloses = voiceOver ? .distantFuture : Date().addingTimeInterval(Self.tipWindow)
+    }
+
+    private func closeReceipt() {
+        Haptics.tap()
+        receiptTimer?.cancel()
+        receiptID = nil
     }
 
     // MARK: Footer
@@ -178,6 +445,7 @@ struct RootView: View {
 
     private var footerPrompt: String {
         if wallet.isSettling { "Counting your change…" }
+        else if hoveredTarget == TipJar.target { "Let go to drop it in the tip jar" }
         else if armed       { "Let go to hand it over" }
         else                { "Hold a note, swipe to the top" }
     }
@@ -213,15 +481,32 @@ private struct WalletHeader: View {
     @EnvironmentObject private var wallet: WalletStore
     @Binding var mode: WalletMode
     var onAccounts: () -> Void
+    var onJars: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("CASHSTACK")
                     .font(Theme.label(11))
                     .kerning(2.4)
                     .foregroundStyle(Theme.ink)
                 Spacer()
+                Button(action: onJars) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Jars")
+                            .font(Theme.body(12))
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .contentShape(Rectangle())
+                    .background(PillBackground())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("jarsButton")
+                .accessibilityLabel("Spare change jars")
                 Button(action: onAccounts) {
                     HStack(spacing: 7) {
                         AccountDot(account: wallet.selectedAccount)
@@ -276,7 +561,7 @@ private struct AccountDot: View {
 
 // MARK: - Payment header
 
-private struct PayHeader: View {
+private struct PayHeader<TipJarView: View>: View {
     let request: PaymentRequest
     /// Counts down as money is handed over, then goes negative — at which
     /// point it is the change on its way back.
@@ -284,6 +569,8 @@ private struct PayHeader: View {
     let tendered: Int
     let armed: Bool
     var onCancel: () -> Void
+    /// Beside the amount, at places that take tips.
+    @ViewBuilder var tipJar: () -> TipJarView
 
     private var isOverpaid: Bool { outstanding < 0 }
     private var isExact: Bool { outstanding == 0 }
@@ -321,19 +608,27 @@ private struct PayHeader: View {
             }
             .padding(.top, 6)
 
-            Text(caption)
-                .font(Theme.body(13))
-                .foregroundStyle(Theme.inkSoft)
-                .padding(.top, 12)
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(caption)
+                        .font(Theme.body(13))
+                        .foregroundStyle(Theme.inkSoft)
+                        .padding(.top, 12)
 
-            // Green once it goes negative: that figure is money coming back.
-            Text(Money.format(minor: outstanding))
-                .accessibilityIdentifier("outstandingAmount")
-                .font(Theme.display(46))
-                .foregroundStyle(isOverpaid ? Theme.credit : Theme.ink)
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.easeOut(duration: 0.2), value: isOverpaid)
+                    // Green once it goes negative: that figure is money coming back.
+                    Text(Money.format(minor: outstanding))
+                        .accessibilityIdentifier("outstandingAmount")
+                        .font(Theme.display(46))
+                        .foregroundStyle(isOverpaid ? Theme.credit : Theme.ink)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: 0.2), value: isOverpaid)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                Spacer(minLength: 0)
+                tipJar()
+            }
 
             // Hairline track that fills as money is handed over.
             GeometryReader { geo in
@@ -414,42 +709,72 @@ private struct LoadingPile: View {
 
 private struct ReceiptCard: View {
     let transaction: CashTransaction
+    /// Set when the receipt holds the tip jar out for some of the change.
+    var tipping: Tipping?
+    var onTipJar: () -> Void = {}
+    var onClose: () -> Void = {}
+
+    struct Tipping {
+        let isHovered: Bool
+        let refusal: String?
+        let closes: Date
+        let duration: TimeInterval
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Theme.ink))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Theme.ink))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Paid \(Money.format(minor: transaction.amountMinor)) to \(transaction.merchant)")
-                    .accessibilityIdentifier("receiptHeadline")
-                    .font(Theme.title(14))
-                    .foregroundStyle(Theme.ink)
-                Text(transaction.changeMinor > 0
-                     ? "\(Money.format(minor: transaction.changeMinor)) change falling back in"
-                     : "Exact money — no change")
-                    .font(Theme.body(12))
-                    .foregroundStyle(Theme.inkSoft)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Paid \(Money.format(minor: transaction.amountMinor)) to \(transaction.merchant)")
+                        .accessibilityIdentifier("receiptHeadline")
+                        .font(Theme.title(14))
+                        .foregroundStyle(Theme.ink)
+                    Text(subline)
+                        .accessibilityIdentifier("receiptDetail")
+                        .font(Theme.body(12))
+                        .foregroundStyle(Theme.inkSoft)
+                }
+                Spacer(minLength: 0)
+
+                if tipping != nil {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                            .frame(width: 28, height: 28)
+                            .background(PillBackground())
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close receipt")
+                }
             }
-            Spacer(minLength: 0)
+
+            if let tipping {
+                TipJarButton(tipMinor: transaction.tipMinor,
+                             isHovered: tipping.isHovered,
+                             refusal: tipping.refusal,
+                             wide: true,
+                             action: onTipJar)
+                Countdown(closes: tipping.closes, duration: tipping.duration)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background {
-            RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
-                        .fill(Theme.ground.opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
-                        .strokeBorder(Theme.ink, lineWidth: Theme.hairline)
-                )
-                .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
-        }
+        .background(FloatingCard())
+    }
+
+    private var subline: String {
+        let change = transaction.changeMinor > 0
+            ? "\(Money.format(minor: transaction.changeMinor)) change falling back in"
+            : "Exact money — no change"
+        guard transaction.tipMinor > 0 else { return change }
+        return "\(change) · \(Money.format(minor: transaction.tipMinor)) tip"
     }
 }

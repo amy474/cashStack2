@@ -11,6 +11,27 @@ final class CashScene: SKScene {
     var onCrossPayLine: ((Bool) -> Void)?
     /// A piece was double-tapped and has been broken into smaller money.
     var onSplit: ((Denomination) -> Void)?
+    /// The held piece was let go, wherever it ended up.
+    var onLetGo: ((Denomination) -> Void)?
+
+    // MARK: Jars
+
+    /// Somewhere other than the till that a held piece can be dropped: the
+    /// coin jars, or the tip jar. Frames are in the view's own top-left
+    /// coordinates, which is what SwiftUI measures them in.
+    struct DropTarget: Equatable {
+        let id: String
+        let frame: CGRect
+    }
+
+    var dropTargets: [DropTarget] = []
+    /// The held piece moved over a target, or off it.
+    var onHoverTarget: ((String?) -> Void)?
+    /// Asked on release over a target. A refusal bounces the piece back.
+    var canDrop: ((Denomination, String) -> Bool)?
+    /// The piece went in. Called straight away, while it is still sinking.
+    var onDrop: ((Denomination, String) -> Void)?
+    private var hoveredTarget: String?
 
     /// When false, dragging a note to the top just drops it back in the pile.
     var isPaymentActive = false { didSet { refreshPayLine() } }
@@ -35,6 +56,9 @@ final class CashScene: SKScene {
     private var lastTouchTime: TimeInterval = 0
     private var flick = CGVector.zero
     private let holdDelay: TimeInterval = 0.12
+    /// What the held piece is scaled to: lifted, swollen over the pay line, or
+    /// shrunk over a jar.
+    private var heldScale: CGFloat = 1.14
 
     private var payLineY: CGFloat { max(size.height - payLineInset, size.height * 0.5) }
 
@@ -285,24 +309,64 @@ final class CashScene: SKScene {
         node.physicsBody?.velocity = .zero
         node.physicsBody?.angularVelocity = 0
 
-        let armed = isPaymentActive && node.position.y > payLineY
+        // A jar wins over the pay line: the tip jar sits above it, and a coin
+        // aimed at the jar should never end up paying the bill instead.
+        let target = dropTarget(at: point)
+        let armed = isPaymentActive && target == nil && node.position.y > payLineY
+        let targetChanged = target != hoveredTarget
+        if targetChanged {
+            hoveredTarget = target
+            onHoverTarget?(target)
+        }
         if armed != isArmed {
             isArmed = armed
             refreshPayLine()
             onCrossPayLine?(armed)
-            Haptics.arm()
-            node.removeAction(forKey: "armPulse")
-            node.run(.sequence([
-                .scale(to: armed ? 1.25 : 1.14, duration: 0.1)
-            ]), withKey: "armPulse")
         }
+
+        // Over a jar the piece shrinks a touch, as if it is about to go in;
+        // over the pay line it swells, ready to hand over.
+        let scale: CGFloat = target != nil ? 0.92 : (armed ? 1.25 : 1.14)
+        if targetChanged || scale != heldScale {
+            Haptics.arm()
+        }
+        if scale != heldScale {
+            heldScale = scale
+            node.removeAction(forKey: "armPulse")
+            node.run(.scale(to: scale, duration: 0.1), withKey: "armPulse")
+        }
+    }
+
+    /// Which drop target the finger is over, if any. The finger, not the
+    /// middle of the piece: a note held by its corner has its middle well
+    /// off to one side, and the thumb is what the person is aiming with. A
+    /// little slack around each target, because a thumb is not a cursor.
+    private func dropTarget(at point: CGPoint) -> String? {
+        guard view != nil, !dropTargets.isEmpty else { return nil }
+        let finger = convertPoint(toView: point)
+        return dropTargets.first { $0.frame.insetBy(dx: -10, dy: -10).contains(finger) }?.id
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = activeTouch, touches.contains(touch), let node = heldNode else { return }
         node.removeAction(forKey: "holdTimer")
+        let wasHeld = node.isHeld
 
-        if node.isHeld, isPaymentActive, node.position.y > payLineY {
+        if node.isHeld, let target = hoveredTarget,
+           let frame = dropTargets.first(where: { $0.id == target })?.frame {
+            let denomination = node.denomination
+            if canDrop?(denomination, target) ?? false {
+                nodesByDenomination[denomination.minor]?.removeAll { $0 === node }
+                Haptics.drop()
+                node.dropIn(at: convertPoint(fromView: CGPoint(x: frame.midX, y: frame.midY)))
+                onDrop?(denomination, target)
+            } else {
+                // Full, switched off, or not for this piece: it bounces back.
+                node.endHold(flick: CGVector(dx: 0, dy: -120))
+                node.shrugOff()
+                Haptics.refuse()
+            }
+        } else if node.isHeld, isPaymentActive, node.position.y > payLineY {
             let denomination = node.denomination
             nodesByDenomination[denomination.minor]?.removeAll { $0 === node }
             node.tender { [weak self] in
@@ -322,10 +386,12 @@ final class CashScene: SKScene {
             refreshPayLine()
             onCrossPayLine?(false)
         }
+        if wasHeld { onLetGo?(node.denomination) }
         cancelTouch()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        let held = heldNode?.isHeld == true ? heldNode : nil
         heldNode?.removeAction(forKey: "holdTimer")
         heldNode?.endHold(flick: .zero)
         if isArmed {
@@ -333,6 +399,7 @@ final class CashScene: SKScene {
             refreshPayLine()
             onCrossPayLine?(false)
         }
+        if let held { onLetGo?(held.denomination) }
         cancelTouch()
     }
 
@@ -340,6 +407,11 @@ final class CashScene: SKScene {
         activeTouch = nil
         heldNode = nil
         flick = .zero
+        heldScale = 1.14
+        if hoveredTarget != nil {
+            hoveredTarget = nil
+            onHoverTarget?(nil)
+        }
     }
 
     // MARK: Breaking money up

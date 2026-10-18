@@ -95,6 +95,23 @@ final class MoneyNode: SKSpriteNode {
         ]))
     }
 
+    /// Dropped in a jar: the piece slides to the jar's middle and sinks into it.
+    func dropIn(at point: CGPoint) {
+        isHeld = false
+        physicsBody = nil
+        removeAllActions()
+        let slide = SKAction.move(to: point, duration: 0.2)
+        slide.timingMode = .easeOut
+        run(.sequence([
+            .group([
+                slide,
+                .scale(to: 0.3, duration: 0.24),
+                .sequence([.wait(forDuration: 0.08), .fadeOut(withDuration: 0.16)])
+            ]),
+            .removeFromParent()
+        ]))
+    }
+
     /// Broken into smaller money: the piece pops and vanishes.
     func burst() {
         physicsBody = nil
