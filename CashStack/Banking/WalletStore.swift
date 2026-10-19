@@ -49,9 +49,24 @@ final class WalletStore: ObservableObject {
     var tipMinor: Int { tipPieces.reduce(0) { $0 + $1.minor } }
 
     private var sources: [BankDataSource]
+    /// Which source each account came from, so a payment goes to the right bank.
+    private var owners: [String: BankDataSource] = [:]
+    /// What each bank last said, before any practice spending.
+    @Published private(set) var bankMinor: [String: Int] = [:]
+    @Published private(set) var lastRefreshed: Date?
+    @Published private(set) var isRefreshing = false
+    /// The last attempt to read the banks failed, so an empty wallet means
+    /// "couldn't reach them", not "nothing connected".
+    @Published private(set) var loadFailed = false
 
-    init(sources: [BankDataSource] = DemoBanks.sources()) {
+    /// Real banks, read-only: paying and the jars are practice, and the
+    /// chosen account is remembered between launches.
+    let isLive: Bool
+
+    init(sources: [BankDataSource] = DemoBanks.sources(), isLive: Bool = false) {
         self.sources = sources
+        self.isLive = isLive
+        if isLive { selectedAccountID = UserDefaults.standard.string(forKey: Preference.selectedAccountID) }
     }
 
     // MARK: Derived
@@ -62,6 +77,13 @@ final class WalletStore: ObservableObject {
 
     /// What is in the pile: the selected account's available balance.
     var walletMinor: Int { selectedAccount?.availableMinor ?? 0 }
+
+    /// How far practice payments and jars have taken the pile below what the
+    /// bank says. Always zero in the demo, where the money "really" moves.
+    var practiceSpentMinor: Int {
+        guard isLive, let id = selectedAccountID, let bank = bankMinor[id] else { return 0 }
+        return max(0, bank - walletMinor)
+    }
 
     /// The pile grouped by denomination, biggest first — what the sorted view
     /// and the physics scene both read.
@@ -117,21 +139,86 @@ final class WalletStore: ObservableObject {
 
     func load() async {
         phase = .loading
-        var merged: [LinkedAccount] = []
+        loadFailed = false
+        var merged: [(LinkedAccount, BankDataSource)] = []
         for source in sources {
             do {
                 try await source.connect()
-                merged.append(contentsOf: try await source.accounts())
+                merged.append(contentsOf: try await source.accounts().map { ($0, source) })
             } catch {
-                errorMessage = "\(source.institution.name): \(error.localizedDescription)"
+                loadFailed = true
+                errorMessage = isLive ? error.localizedDescription
+                                      : "\(source.institution.name): \(error.localizedDescription)"
             }
         }
-        accounts = merged.sorted { $0.availableMinor > $1.availableMinor }
+        adopt(merged)
+        phase = .ready
+    }
+
+    /// Take a fresh set of accounts from the bank. Any practice spending is
+    /// forgotten: the pile goes back to what the bank says.
+    private func adopt(_ merged: [(LinkedAccount, BankDataSource)]) {
+        owners = Dictionary(merged.map { ($0.0.id, $0.1) }, uniquingKeysWith: { first, _ in first })
+        accounts = merged.map(\.0).sorted { $0.availableMinor > $1.availableMinor }
+        bankMinor = Dictionary(accounts.map { ($0.id, $0.availableMinor) }, uniquingKeysWith: { first, _ in first })
+        lastRefreshed = Date()
         // Keep the account the user picked; otherwise start with the first
         // bank's account rather than whichever happens to hold the most.
-        if selectedAccount == nil { selectedAccountID = merged.first?.id }
+        if selectedAccount == nil { selectedAccountID = merged.first?.0.id }
+        rememberSelection()
         tidyPile()
-        phase = .ready
+    }
+
+    /// Ask the banks for the latest balances. Not mid-payment: the money in
+    /// the hand came out of the balance as it was.
+    func refreshFromBank() async {
+        guard request == nil, !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        guard let merged = await readAll({ try await $0.refresh() }), request == nil else { return }
+        adopt(merged)
+    }
+
+    /// Put the pile back to the bank balance without asking the bank again.
+    func discardPractice() {
+        guard request == nil else { return }
+        for index in accounts.indices {
+            if let bank = bankMinor[accounts[index].id] { accounts[index].availableMinor = bank }
+        }
+        tidyPile()
+    }
+
+    /// Accounts that just came back from connecting a bank.
+    func connected(_ linked: [LinkedAccount]) async {
+        if let first = linked.first, selectedAccount == nil { selectedAccountID = first.id }
+        await refreshQuietly()
+    }
+
+    /// Reload without the loading screen, keeping the pile on show.
+    func refreshQuietly() async {
+        guard request == nil, let merged = await readAll({ try await $0.accounts() }), request == nil else { return }
+        adopt(merged)
+    }
+
+    /// Every source's accounts, or nil (with the error on show) if any failed.
+    private func readAll(_ read: (BankDataSource) async throws -> [LinkedAccount]) async -> [(LinkedAccount, BankDataSource)]? {
+        var merged: [(LinkedAccount, BankDataSource)] = []
+        for source in sources {
+            do {
+                merged.append(contentsOf: try await read(source).map { ($0, source) })
+            } catch {
+                errorMessage = error.localizedDescription
+                loadFailed = true
+                return nil
+            }
+        }
+        loadFailed = false
+        return merged
+    }
+
+    private func rememberSelection() {
+        guard isLive else { return }
+        UserDefaults.standard.set(selectedAccountID, forKey: Preference.selectedAccountID)
     }
 
     /// Link another institution at runtime — the hook a real "add your bank"
@@ -140,7 +227,12 @@ final class WalletStore: ObservableObject {
         sources.append(source)
         do {
             try await source.connect()
-            accounts.append(contentsOf: try await source.accounts())
+            let linked = try await source.accounts()
+            for account in linked {
+                owners[account.id] = source
+                bankMinor[account.id] = account.availableMinor
+            }
+            accounts.append(contentsOf: linked)
             accounts.sort { $0.availableMinor > $1.availableMinor }
             tidyPile()
         } catch {
@@ -154,6 +246,7 @@ final class WalletStore: ObservableObject {
         guard request == nil, accountID != selectedAccountID,
               accounts.contains(where: { $0.id == accountID }) else { return }
         selectedAccountID = accountID
+        rememberSelection()
         tidyPile()
     }
 
@@ -248,7 +341,7 @@ final class WalletStore: ObservableObject {
     private func debitSelected(_ minor: Int) async -> [String] {
         guard let account = selectedAccount, minor > 0 else { return [] }
 
-        if let source = sources.first(where: { $0.institution.id == account.institution.id }) {
+        if let source = owners[account.id] {
             do {
                 try await source.debit(accountID: account.id, minor: minor)
             } catch {
@@ -438,8 +531,7 @@ final class WalletStore: ObservableObject {
     private func post(_ minor: Int, to accountID: String, debit: Bool) {
         guard minor > 0, let index = accounts.firstIndex(where: { $0.id == accountID }) else { return }
         accounts[index].availableMinor += debit ? -minor : minor
-        let institution = accounts[index].institution.id
-        guard let source = sources.first(where: { $0.institution.id == institution }) else { return }
+        guard let source = owners[accountID] else { return }
         Task {
             do {
                 if debit { try await source.debit(accountID: accountID, minor: minor) }
@@ -454,6 +546,7 @@ final class WalletStore: ObservableObject {
 
     /// Put the demo back to its starting state.
     func reset() async {
+        guard !isLive else { return }
         settlement?.cancel()
         sources = DemoBanks.sources()
         selectedAccountID = nil

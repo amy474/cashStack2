@@ -19,6 +19,16 @@ protocol BankDataSource: AnyObject {
     /// Add to the available balance — a coin saved into this account, or one
     /// taken back out of a jar.
     func credit(accountID: String, minor: Int) async throws
+    /// Ask the bank for up-to-date balances, where that's a separate thing
+    /// from reading them.
+    func refresh() async throws -> [LinkedAccount]
+    /// False for read-only sources, where paying and the jars are practice.
+    var movesMoney: Bool { get }
+}
+
+extension BankDataSource {
+    func refresh() async throws -> [LinkedAccount] { try await accounts() }
+    var movesMoney: Bool { true }
 }
 
 enum BankError: LocalizedError {

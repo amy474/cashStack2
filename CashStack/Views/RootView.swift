@@ -62,6 +62,13 @@ struct RootView: View {
                     LoadingPile().ignoresSafeArea()
                 }
 
+                if wallet.isLive && wallet.phase == .ready && wallet.accounts.isEmpty {
+                    EmptyWallet()
+                        .padding(.horizontal, 18)
+                        .padding(.top, safeTop + headerHeight)
+                        .padding(.bottom, safeBottom + footerHeight)
+                }
+
                 VStack(spacing: 0) {
                     header
                         .frame(height: headerHeight)
@@ -97,6 +104,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.22), value: receiptID)
         .animation(.easeInOut(duration: 0.22), value: wallet.lastDrop?.id)
         .animation(.easeInOut(duration: 0.22), value: showsCoachMark)
+        .animation(.easeInOut(duration: 0.22), value: wallet.errorMessage)
         .sheet(isPresented: $showAccounts) { AccountsSheet() }
         .sheet(isPresented: $showSpareChange) { SpareChangeSheet() }
         .sheet(item: $setup, onDismiss: {
@@ -180,6 +188,7 @@ struct RootView: View {
                       outstanding: wallet.outstandingMinor,
                       tendered: wallet.tenderedMinor,
                       armed: armed,
+                      practice: wallet.isLive,
                       onCancel: {
                           Haptics.tap()
                           wallet.cancelRequest()
@@ -209,6 +218,7 @@ struct RootView: View {
     @ViewBuilder private var banner: some View {
         if let receipt = wallet.transaction(receiptID) {
             ReceiptCard(transaction: receipt,
+                        practice: wallet.isLive,
                         tipping: receiptOffersTip ? .init(
                             isHovered: hoveredTarget == TipJar.target,
                             refusal: held.flatMap { wallet.tipRefusal(for: $0, alreadyTipped: receipt.tipMinor) },
@@ -226,6 +236,19 @@ struct RootView: View {
             }
             .id(drop.id)
             .transition(.move(edge: .top).combined(with: .opacity))
+        } else if let message = wallet.errorMessage {
+            Button {
+                wallet.errorMessage = nil
+            } label: {
+                Notice(text: message, floating: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Dismisses the message")
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .task(id: message) {
+                try? await Task.sleep(for: .seconds(6))
+                if wallet.errorMessage == message { wallet.errorMessage = nil }
+            }
         } else if showsCoachMark {
             JarCoachMark { coachDismissed = true }
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -423,6 +446,9 @@ struct RootView: View {
                 PrimaryPillButton(title: "Pay at till", systemImage: "wave.3.right") {
                     payAtTill()
                 }
+                // Nothing to pay with until a bank is connected.
+                .disabled(wallet.pieceCount == 0)
+                .opacity(wallet.pieceCount == 0 ? 0.35 : 1)
             } else {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(footerPrompt)
@@ -535,7 +561,8 @@ private struct WalletHeader: View {
                 .contentTransition(.numericText())
                 .padding(.top, 12)
 
-            Text("\(wallet.pieceCount) pieces of cash · \(wallet.selectedAccount?.institution.name ?? "no account")")
+            Text(subline)
+                .accessibilityIdentifier("walletSubline")
                 .font(Theme.body(13))
                 .foregroundStyle(Theme.inkSoft)
                 .padding(.top, 2)
@@ -546,6 +573,14 @@ private struct WalletHeader: View {
                 .padding(.bottom, 12)
         }
         .padding(.horizontal, 18)
+    }
+
+    private var subline: String {
+        let pieces = "\(wallet.pieceCount) pieces of cash"
+        if wallet.practiceSpentMinor > 0 {
+            return "\(pieces) · \(Money.format(minor: wallet.practiceSpentMinor)) spent in practice"
+        }
+        return "\(pieces) · \(wallet.selectedAccount?.institution.name ?? "no account")"
     }
 }
 
@@ -568,6 +603,8 @@ private struct PayHeader<TipJarView: View>: View {
     let outstanding: Int
     let tendered: Int
     let armed: Bool
+    /// Real balances, pretend money: nothing leaves the bank.
+    var practice = false
     var onCancel: () -> Void
     /// Beside the amount, at places that take tips.
     @ViewBuilder var tipJar: () -> TipJarView
@@ -601,7 +638,7 @@ private struct PayHeader<TipJarView: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cancel payment")
                 Spacer()
-                Text("\(request.what.uppercased()) · REF \(request.reference)")
+                Text("\(practice ? "PRACTICE · " : "")\(request.what.uppercased()) · REF \(request.reference)")
                     .font(Theme.label(10))
                     .kerning(1.2)
                     .foregroundStyle(Theme.inkSoft)
@@ -680,6 +717,62 @@ private struct PayHeader<TipJarView: View>: View {
     }
 }
 
+// MARK: - No bank yet
+
+/// Signed in, but nothing connected — or everything disconnected.
+private struct EmptyWallet: View {
+    @EnvironmentObject private var wallet: WalletStore
+    @EnvironmentObject private var session: SessionStore
+    @Environment(\.webAuthenticationSession) private var web
+    @State private var working = false
+    @State private var message: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Spacer(minLength: 0)
+            Text(wallet.loadFailed ? "Couldn't reach your bank" : "Nothing in your wallet yet")
+                .font(Theme.display(28))
+                .foregroundStyle(Theme.ink)
+            Text(wallet.loadFailed
+                 ? "Check your connection and try again. Nothing has changed with your accounts."
+                 : "Connect a bank and its balance turns into cash here. CashStack can only read it — your money stays where it is.")
+                .font(Theme.body(15))
+                .foregroundStyle(Theme.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            if let message { Notice(text: message) }
+            if working {
+                Working(text: wallet.loadFailed ? "Trying again…" : "Fetching your accounts…")
+            } else if wallet.loadFailed {
+                PrimaryPillButton(title: "Try again", systemImage: "arrow.clockwise") {
+                    working = true
+                    Task {
+                        await wallet.refreshQuietly()
+                        working = false
+                    }
+                }
+                .accessibilityIdentifier("retryLoad")
+            } else {
+                PrimaryPillButton(title: "Connect a bank", systemImage: "link") {
+                    working = true
+                    message = nil
+                    Task {
+                        switch await BankLink(api: session.api).run("connect", with: web) {
+                        case .connected(let accounts): await wallet.connected(accounts)
+                        case .cancelled: break
+                        case .failed(let reason): message = reason
+                        }
+                        working = false
+                    }
+                }
+                .accessibilityIdentifier("connectBankEmpty")
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.ground)
+    }
+}
+
 // MARK: - Loading
 
 private struct LoadingPile: View {
@@ -709,6 +802,7 @@ private struct LoadingPile: View {
 
 private struct ReceiptCard: View {
     let transaction: CashTransaction
+    var practice = false
     /// Set when the receipt holds the tip jar out for some of the change.
     var tipping: Tipping?
     var onTipJar: () -> Void = {}
@@ -731,7 +825,7 @@ private struct ReceiptCard: View {
                     .background(Circle().fill(Theme.ink))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Paid \(Money.format(minor: transaction.amountMinor)) to \(transaction.merchant)")
+                    Text("\(practice ? "Practice: paid" : "Paid") \(Money.format(minor: transaction.amountMinor)) to \(transaction.merchant)")
                         .accessibilityIdentifier("receiptHeadline")
                         .font(Theme.title(14))
                         .foregroundStyle(Theme.ink)
@@ -771,6 +865,7 @@ private struct ReceiptCard: View {
     }
 
     private var subline: String {
+        if practice { return "Nothing left your bank. It's your real balance, played with." }
         let change = transaction.changeMinor > 0
             ? "\(Money.format(minor: transaction.changeMinor)) change falling back in"
             : "Exact money — no change"

@@ -327,6 +327,7 @@ struct Countdown: View {
 
 /// Says where the coin went and what happens to it next, with a way back.
 struct DropToast: View {
+    @EnvironmentObject private var wallet: WalletStore
     let drop: JarDrop
     var onUndo: () -> Void
 
@@ -340,7 +341,7 @@ struct DropToast: View {
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                Text(drop.jar.whatHappensNext)
+                Text(wallet.isLive ? "Practice — nothing left your bank" : drop.jar.whatHappensNext)
                     .font(Theme.body(12))
                     .foregroundStyle(Theme.inkSoft)
             }

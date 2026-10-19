@@ -23,6 +23,12 @@ struct SpareChangeSheet: View {
                     summary
                     Hairline()
 
+                    if wallet.isLive {
+                        Notice(text: "The jars are practice for now. CashStack reads your bank balance but can't move money, so nothing is invested, donated or saved.")
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                    }
+
                     SheetSectionLabel(title: "Jars")
                     ForEach(CoinJar.allCases) { jar in
                         JarSettingRow(jar: jar)
