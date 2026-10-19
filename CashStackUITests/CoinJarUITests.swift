@@ -66,11 +66,12 @@ final class CoinJarUITests: XCTestCase {
     func testNotesStayOutOfTheJarsUnlessAllowed() {
         let before = balance()
         // A note with no coin lying on it, so the thumb really does pick up a note.
-        let coinFrames = coins.flatMap { money($0) }.map(\.frame)
-        guard let note = notes.flatMap({ money($0) })
-            .filter({ note in !coinFrames.contains { $0.contains(CGPoint(x: note.frame.midX, y: note.frame.midY)) } })
-            .max(by: { $0.frame.midY < $1.frame.midY }) else { return XCTFail("no notes") }
-        note.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let pile = pieces()
+        let coinFrames = pile.filter { coins.contains($0.label) }.map(\.frame)
+        guard let note = pile.filter({ notes.contains($0.label) }).map(\.frame)
+            .filter({ note in !coinFrames.contains { $0.contains(CGPoint(x: note.midX, y: note.midY)) } })
+            .max(by: { $0.midY < $1.midY }) else { return XCTFail("no notes") }
+        point(in: note)
             .press(forDuration: 0.45, thenDragTo: jar(column: 0), withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertFalse(app.buttons["pick-OZ200"].waitForExistence(timeout: 2),
                        "A note is not offered the jars")
@@ -179,14 +180,15 @@ final class CoinJarUITests: XCTestCase {
     /// lowest first, clear of the glass header.
     private func dropACoin(on target: @autoclosure () -> XCUICoordinate, until landed: () -> Bool) -> Bool {
         for attempt in 0..<4 {
-            let noteFrames = notes.flatMap { money($0) }.map(\.frame)
-            let all = coins.flatMap { money($0) }.sorted { $0.frame.midY > $1.frame.midY }
-            let covered: (XCUIElement) -> Bool = { coin in
-                noteFrames.contains { $0.contains(CGPoint(x: coin.frame.midX, y: coin.frame.midY)) }
+            let pile = pieces()
+            let noteFrames = pile.filter { notes.contains($0.label) }.map(\.frame)
+            let all = pile.filter { coins.contains($0.label) }.map(\.frame).sorted { $0.midY > $1.midY }
+            let covered: (CGRect) -> Bool = { coin in
+                noteFrames.contains { $0.contains(CGPoint(x: coin.midX, y: coin.midY)) }
             }
             let candidates = all.filter { !covered($0) } + all.filter(covered)
             guard !candidates.isEmpty else { return false }
-            candidates[attempt % candidates.count].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            point(in: candidates[attempt % candidates.count])
                 .press(forDuration: 0.45, thenDragTo: target(), withVelocity: .slow, thenHoldForDuration: 0.5)
             if landed() { return true }
             Thread.sleep(forTimeInterval: 0.3)
@@ -212,12 +214,28 @@ final class CoinJarUITests: XCTestCase {
         return false
     }
 
-    private func money(_ label: String) -> [XCUIElement] {
-        app.otherElements.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
+    /// Every note and coin on screen, read in one pass. Asking for each
+    /// label's elements and then each one's frame is a round trip to the app
+    /// apiece — seconds, on a busy machine, which is long enough for the
+    /// receipt's tip jar to close while the test is still looking for a coin.
+    private func pieces() -> [(label: String, frame: CGRect)] {
+        guard let root = try? app.snapshot() else { return [] }
+        let wanted = Set(notes + coins)
+        var found: [(label: String, frame: CGRect)] = []
+        var queue = [root]
+        while let next = queue.popLast() {
+            if wanted.contains(next.label) { found.append((next.label, next.frame)) }
+            queue.append(contentsOf: next.children)
+        }
+        return found
     }
 
-    private func lowestPiece(of labels: [String]) -> XCUIElement? {
-        labels.flatMap { money($0) }.max { $0.frame.midY < $1.frame.midY }
+    private func point(in frame: CGRect) -> XCUICoordinate {
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+    }
+
+    private func lowestPiece(of labels: [String]) -> CGRect? {
+        pieces().filter { labels.contains($0.label) }.map(\.frame).max { $0.midY < $1.midY }
     }
 
     /// Keep handing over the biggest note to hand until the bill is covered.
@@ -227,7 +245,7 @@ final class CoinJarUITests: XCTestCase {
             guard label.exists, cents(label.label) > 0 else { return }
             guard let piece = lowestPiece(of: notes) ?? lowestPiece(of: coins) else { return }
             let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.10))
-            piece.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            point(in: piece)
                 .press(forDuration: 0.45, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 0.4)
             Thread.sleep(forTimeInterval: 0.8)
         }

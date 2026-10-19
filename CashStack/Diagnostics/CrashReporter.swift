@@ -43,11 +43,12 @@ actor DiagnosticsOutbox {
     private let keepAtMost = 20
     private var sending = false
 
-    init(folder: URL? = nil, endpoint: URL = AppConfig.apiBaseURL.appending(path: "v1/diagnostics")) {
+    init(folder: URL? = nil,
+         endpoint: URL = AppConfig.apiBaseURL.appending(path: "v1/diagnostics"),
+         config: URLSessionConfiguration = .ephemeral) {
         self.folder = folder ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appending(path: "Diagnostics", directoryHint: .isDirectory)
         self.endpoint = endpoint
-        let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
         config.httpAdditionalHeaders = [
             "Content-Type": "application/json",
