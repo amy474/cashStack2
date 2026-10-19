@@ -10,7 +10,12 @@ enum MoneyArt {
 
     static func image(for denomination: Denomination) -> UIImage {
         if let cached = imageCache[denomination.minor] { return cached }
-        let image = denomination.kind == .note ? drawNote(denomination) : drawCoin(denomination)
+        let image: UIImage
+        switch denomination.kind {
+        case .note:   image = drawNote(denomination)
+        case .coin:   image = drawCoin(denomination)
+        case .bundle: image = drawBundle(denomination)
+        }
         imageCache[denomination.minor] = image
         return image
     }
@@ -115,6 +120,98 @@ enum MoneyArt {
         }
     }
 
+    // MARK: - Bundles
+
+    /// A bundle seen from above: the top $100 with a band round it the short
+    /// way, and below it the edge of the stack, one hairline per layer. A
+    /// $1,000 bundle is a thin stack under a white band; a $10,000 brick is
+    /// ten bundles deep under a black one.
+    private static func drawBundle(_ d: Denomination) -> UIImage {
+        let note = Denomination.n100
+        let size = d.size
+        // The top note, scaled down to the bundle's width.
+        let scale = size.width / note.size.width
+        let h = note.size.height * scale
+        let depth = size.height - h
+        let isBrick = d.hundreds >= 100
+        let layers = isBrick ? 10 : 4
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.opaque = false
+        format.scale = 3
+
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let cg = context.cgContext
+            let corner = h * 0.128
+            let inset = h * 0.014
+            let sheet = CGRect(x: 0, y: 0, width: size.width, height: h).insetBy(dx: inset, dy: inset)
+            // Every layer is the same sheet moved down, so together they make
+            // one taller rounded rectangle.
+            let outline = UIBezierPath(roundedRect: CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset),
+                                       cornerRadius: corner)
+
+            // The edge of the stack, deepest layer first, so each one leaves
+            // only its bottom edge showing below the one above.
+            let edge = note.tint.mixed(with: .white, 0.40)
+            let shade = note.tint.mixed(with: UIColor(rgb: 0x101010), 0.16)
+            for layer in stride(from: layers, through: 1, by: -1) {
+                let path = UIBezierPath(roundedRect: sheet.offsetBy(dx: 0, dy: depth * CGFloat(layer) / CGFloat(layers)),
+                                        cornerRadius: corner)
+                (isBrick && layer % 2 == 0 ? shade : edge).setFill()
+                path.fill()
+                UIColor.black.withAlphaComponent(0.5).setStroke()
+                path.lineWidth = Theme.hairline
+                path.stroke()
+            }
+
+            image(for: note).draw(in: CGRect(x: 0, y: 0, width: size.width, height: h))
+
+            // The band, wrapped over the top note and down the edge of the
+            // stack, where it sits in a little shadow.
+            let band = CGRect(x: size.width * 0.57, y: 0, width: h * 0.62, height: size.height)
+            let paper = isBrick ? UIColor(rgb: 0x111111) : .white
+            let ink = isBrick ? UIColor.white : .black
+            cg.saveGState()
+            outline.addClip()
+            paper.setFill()
+            UIRectFill(band)
+            paper.mixed(with: isBrick ? .white : .black, 0.12).setFill()
+            UIRectFill(CGRect(x: band.minX, y: sheet.maxY, width: band.width, height: size.height - sheet.maxY))
+
+            cg.setStrokeColor(UIColor.black.cgColor)
+            cg.setLineWidth(Theme.hairline)
+            cg.move(to: CGPoint(x: band.minX, y: 0))
+            cg.addLine(to: CGPoint(x: band.minX, y: size.height))
+            cg.move(to: CGPoint(x: band.maxX, y: 0))
+            cg.addLine(to: CGPoint(x: band.maxX, y: size.height))
+            cg.strokePath()
+            cg.setStrokeColor(ink.withAlphaComponent(0.35).cgColor)
+            cg.move(to: CGPoint(x: band.minX, y: sheet.maxY))
+            cg.addLine(to: CGPoint(x: band.maxX, y: sheet.maxY))
+            cg.strokePath()
+            cg.restoreGState()
+
+            // What it is worth, printed on the band.
+            let value = NSAttributedString(string: d.label, attributes: [
+                .font: fittedFont(d.label, size: h * 0.19, weight: .bold, width: band.width - h * 0.12),
+                .foregroundColor: ink
+            ])
+            let count = NSAttributedString(string: "\(d.hundreds) × \(note.label)", attributes: [
+                .font: Theme.uiFont(h * 0.08, .medium),
+                .foregroundColor: ink.withAlphaComponent(0.65)
+            ])
+            let valueSize = value.size()
+            let countSize = count.size()
+            let top = h * 0.5 - (valueSize.height + countSize.height) * 0.5
+            value.draw(at: CGPoint(x: band.midX - valueSize.width / 2, y: top))
+            count.draw(at: CGPoint(x: band.midX - countSize.width / 2, y: top + valueSize.height))
+
+            UIColor.black.setStroke()
+            outline.lineWidth = Theme.line
+            outline.stroke()
+        }
+    }
+
     // MARK: - Coins
 
     private static func drawCoin(_ d: Denomination) -> UIImage {
@@ -177,6 +274,13 @@ enum MoneyArt {
     }
 
     // MARK: - Helpers
+
+    /// The font at `size`, or smaller if that is what it takes to fit `width`.
+    private static func fittedFont(_ text: String, size: CGFloat, weight: UIFont.Weight, width: CGFloat) -> UIFont {
+        let font = Theme.uiFont(size, weight)
+        let natural = text.size(withAttributes: [.font: font]).width
+        return natural <= width ? font : Theme.uiFont(size * width / natural, weight)
+    }
 
     private static func drawLinearGradient(_ cg: CGContext, from: UIColor, to: UIColor,
                                            start: CGPoint, end: CGPoint) {

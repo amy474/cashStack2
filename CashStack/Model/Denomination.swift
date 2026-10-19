@@ -4,6 +4,8 @@ import UIKit
 enum MoneyKind {
     case note
     case coin
+    /// $100 notes strapped together. Only turns up in big balances.
+    case bundle
 }
 
 /// One physical denomination of money. Sizes are proportional to the real
@@ -53,10 +55,35 @@ extension Denomination {
     static let c5   = Denomination(minor:   5, kind: .coin, label: "5c",  face: "5c",
                                    tint: UIColor(rgb: 0xFF8A5B), size: CGSize(width: 49, height: 49))
 
+    // MARK: Bundles — $100 notes strapped together, for balances too big to
+    // hold as loose notes. Seen from above a bundle is the top $100 with a
+    // band round it; the extra height is the edge of the stack underneath,
+    // so a brick sits taller than a bundle. Both are drawn a touch narrower
+    // than a loose $100, so two can lie side by side across the screen.
+    static let b1000  = Denomination(minor:   100_000, kind: .bundle, label: "$1,000",  face: "1,000",
+                                     tint: n100.tint, size: CGSize(width: 188, height: 94))
+    static let b10000 = Denomination(minor: 1_000_000, kind: .bundle, label: "$10,000", face: "10,000",
+                                     tint: n100.tint, size: CGSize(width: 188, height: 106))
+
     /// Highest value first — the order every breakdown is computed in.
-    static let all: [Denomination] = [n100, n50, n20, n10, n5, c200, c100, c50, c20, c10, c5]
+    static let all: [Denomination] = [b10000, b1000, n100, n50, n20, n10, n5, c200, c100, c50, c20, c10, c5]
+
+    /// Everything but the bundles: what an ordinary balance is broken into.
+    static let loose: [Denomination] = all.filter { $0.kind != .bundle }
 
     static func named(minor: Int) -> Denomination? { all.first { $0.minor == minor } }
+
+    /// How many $100 notes are strapped into a bundle.
+    var hundreds: Int { minor / Denomination.n100.minor }
+
+    /// What one is called: "note", "coin" or "bundle".
+    var noun: String {
+        switch kind {
+        case .note:   "note"
+        case .coin:   "coin"
+        case .bundle: "bundle"
+        }
+    }
 }
 
 /// A count of one denomination.
@@ -82,11 +109,25 @@ enum Money {
         return value - value % smallestPiece
     }
 
-    /// Break an amount into the fewest physical notes and coins.
+    /// Most $100 notes the pile holds loose. A balance that would need more
+    /// has its thousands strapped into bundles instead, so $80,000 of savings
+    /// is eight bricks rather than eight hundred notes for the physics to push
+    /// around. Small balances never see a bundle.
+    static let maxLooseHundreds = 15
+
+    /// Break an amount into the fewest physical notes and coins — or, once it
+    /// would take more than `maxLooseHundreds` $100s, the fewest pieces
+    /// counting bundles.
     static func breakdown(ofMinor amount: Int) -> [MoneyStack] {
-        var remaining = cashable(amount)
+        let value = cashable(amount)
+        let bundled = value / Denomination.n100.minor > maxLooseHundreds
+        return fewest(value, from: bundled ? Denomination.all : Denomination.loose)
+    }
+
+    private static func fewest(_ amount: Int, from denominations: [Denomination]) -> [MoneyStack] {
+        var remaining = amount
         var stacks: [MoneyStack] = []
-        for denomination in Denomination.all {
+        for denomination in denominations {
             let count = remaining / denomination.minor
             if count > 0 {
                 stacks.append(MoneyStack(denomination: denomination, count: count))
@@ -101,7 +142,8 @@ enum Money {
     static let maxLoosePieces = 120
 
     /// Break one piece of money into the fewest pieces of smaller denominations.
-    /// A $100 becomes two $50s; a $50 becomes two $20s and a $10. The smallest
+    /// A $10,000 brick becomes ten $1,000 bundles and a bundle ten $100s; a
+    /// $100 becomes two $50s; a $50 becomes two $20s and a $10. The smallest
     /// coin there is cannot be broken down, so it comes back empty.
     static func split(_ denomination: Denomination) -> [Denomination] {
         var remaining = denomination.minor

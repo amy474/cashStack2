@@ -1,0 +1,53 @@
+# Checks the backend in server/. The tests run against PGlite (Postgres
+# in-process) and a fake Basiq, so they need no services or secrets. The iOS
+# app is built and tested separately.
+name: server
+
+on:
+  pull_request:
+    paths:
+      - server/**
+      - .github/workflows/server.yml
+  push:
+    branches: [main]
+    paths:
+      - server/**
+      - .github/workflows/server.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: "server: typecheck and test"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # 24+ is required: the scripts run .ts files through Node's type stripping.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  docker:
+    name: "server: docker build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The same image Fly builds on deploy, so a broken Dockerfile fails here first.
+      - run: docker build server/

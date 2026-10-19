@@ -49,6 +49,7 @@ a timer instead of on tilt.
 | **Loose** | The physics pile. Every piece of money is a body in a SpriteKit world whose gravity vector is the phone's own. Shake it and the pile jumps. |
 | **Sorted** | The same cash, counted: denomination, count, subtotal, total. For when you need the number, not the feeling. |
 | **Break it up** | Double tap a note or coin and it bursts into the fewest smaller pieces of the same value. A $100 becomes two $50s; a $50 becomes two $20s and a $10. The 5c has nothing to break into, so it just shakes its head. |
+| **Bundles** | A balance that would take more than fifteen $100s comes strapped instead: $1,000 bundles under a white band and $10,000 bricks under a black one. $80,000 of savings is eight bricks, not eight hundred notes. Double tap a brick for ten bundles, a bundle for ten $100s. |
 | **One account** | Link as many banks as you like, but the wallet holds one account's money at a time. Pick it from the accounts pill at the top; the pile swaps over to that balance, and that is the account the till takes payment from. |
 | **Pay** | Tap **Pay at till** and the till rings something up by itself — no menu to choose from. The amount sits at the top and counts down as you hand money over. Press and hold a note, swipe it above the dashed line, let go. It's gone. |
 | **Jars** | Pick up a coin and the header turns into three jars: **Invest**, **Donate**, **Save**. Drag the coin into one and let go. Let go anywhere else and it drops back in the pile. |
@@ -62,7 +63,8 @@ simply counts further down.
 The pile is the source of truth, not a freshly-computed breakdown. Pay for a
 $14.95 book with a $20 and you are genuinely carrying $5.05 of change
 afterwards — a $5 and a 5c — until you tap **tidy** (the stack icon, bottom
-left), which re-breaks the balance into the fewest possible pieces.
+left), which re-breaks the balance into the fewest possible pieces. Hand over a
+$10,000 brick for a book and the change comes back strapped too.
 
 The top bar is glass and the physics world runs the full height of the screen
 behind it, so a note swiped up to pay is still visible through the frosted bar
@@ -124,7 +126,7 @@ jar cards, tip jar and toast are all labelled for VoiceOver.
 
 ```
 CashStack/
-  Model/Denomination.swift     Sterling denominations, sizes, and the breakdown maths
+  Model/Denomination.swift     Australian notes, coins and bundles, sizes, and the breakdown maths
   Banking/BankDataSource.swift The protocol every bank conforms to, plus the demo source
   Banking/WalletStore.swift    Links accounts, holds the selected one's pile, settles payments
   Physics/CashScene.swift      SpriteKit world: gravity, walls, the pay line, drag-to-pay
@@ -134,7 +136,7 @@ CashStack/
   SpareChange/SpareChange.swift  The jars, the funds and charities, the settings
   SpareChange/JarViews.swift     Jar header, tip jar, undo toast, first-run hint
   SpareChange/SpareChangeSheet.swift  Jars settings and the destination pickers
-  Design/MoneyArt.swift        The notes and coins, drawn at runtime — no image assets
+  Design/MoneyArt.swift        The notes, coins and bundles, drawn at runtime — no image assets
   Design/HoloShine.swift       The holographic shader
   Design/Fonts.swift           Registers Satoshi at launch
   Resources/Fonts/             Satoshi, five weights, with its licence
@@ -145,7 +147,10 @@ CashStack/
 money. The money is drawn big — a note is about half the screen wide — because
 it is meant to be grabbed with a thumb, and every detail in `MoneyArt` is a
 fraction of the note's height so the design holds together at any size. The notes and coins are drawn with CoreGraphics at launch and cached, so
-there is nothing to redraw and nothing to ship.
+there is nothing to redraw and nothing to ship. A bundle is the same $100 drawn
+a touch narrower, so two lie side by side, with a band round it the short way
+and the edge of the stack showing underneath, one hairline per layer. It is a
+heavier, slower body in the physics, so loose notes bounce off it.
 
 **Type.** Satoshi ships in `Resources/Fonts` (Light, Regular, Medium, Bold,
 Black) under the Fontshare free licence, which is included alongside it.
@@ -291,6 +296,13 @@ negative, settling with change, cancelling and getting your money back, paying
 from the sorted view, double tapping to break a note into smaller money, and
 picking which single account fills the pile and pays.
 
+`BundleUITests` covers big balances: the demo's $80,000 Nest egg arriving as
+eight bricks, bundles getting their own row in the sorted view, a brick
+breaking into bundles and a bundle into $100s, tidy strapping them back up, and
+a brick paying for a book with the change coming back. The app takes
+`-account meridian-nest-egg` to start the demo on that account, so the pile is
+nothing but bricks and whatever is under the thumb is a brick.
+
 Where the pile settles decides what is lying on top of what, so a test cannot
 assume the piece it reaches for is the piece it gets. The payment tests pick
 whichever piece is lying lowest on screen — clear of the glass header, where a
@@ -352,6 +364,8 @@ The App Privacy declaration, review notes and Apple keys are covered in
   Relaunching resets them; the account you chose and your session are kept.
 - The funds and charities are made up, like the banks. Investing and donating
   stop at the pool: there is no broker or charity on the other end.
-- Very large balances mean very many notes. With real savings balances this
-  now matters: bundling above some count, rather than simulating hundreds of
-  bodies, is the next thing to build.
+- Bundles stop at $10,000. $100,000 is ten bricks; a balance in the millions
+  is hundreds of them, and the pile overflows just as it used to with notes.
+  Base-ten cash also means an awkward balance like $87,654.30 is 26 pieces, 22
+  of them note-sized. Bundles never go in the jars or the tip jar: a thousand
+  dollars is not spare change.

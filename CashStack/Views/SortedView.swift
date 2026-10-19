@@ -20,6 +20,13 @@ struct SortedView: View {
                     EmptyWallet()
                         .padding(.top, 70)
                 } else {
+                    if !wallet.bundles.isEmpty {
+                        SectionLabel(title: "Bundles", value: wallet.bundles.reduce(0) { $0 + $1.subtotalMinor })
+                        ForEach(Array(wallet.bundles.enumerated()), id: \.element.id) { index, stack in
+                            StackRow(stack: stack, shimmerDelay: Double(index) * 0.18, onPutInJar: onPutInJar)
+                            Hairline().opacity(0.12)
+                        }
+                    }
                     if !wallet.notes.isEmpty {
                         SectionLabel(title: "Notes", value: wallet.notes.reduce(0) { $0 + $1.subtotalMinor })
                         ForEach(Array(wallet.notes.enumerated()), id: \.element.id) { index, stack in
@@ -76,7 +83,7 @@ private struct StackRow: View {
     var body: some View {
         HStack(spacing: 14) {
             MoneyThumb(denomination: stack.denomination,
-                       height: stack.denomination.kind == .note ? 38 : 32,
+                       height: stack.denomination.kind == .coin ? 32 : 38,
                        shimmerDelay: shimmerDelay)
                 .frame(width: 64, alignment: .leading)
 
@@ -84,7 +91,7 @@ private struct StackRow: View {
                 Text(stack.denomination.label)
                     .font(Theme.title(16))
                     .foregroundStyle(Theme.ink)
-                Text(stack.denomination.kind == .note ? "note" : "coin")
+                Text(kindLabel)
                     .font(Theme.body(11))
                     .foregroundStyle(Theme.inkSoft)
             }
@@ -100,7 +107,9 @@ private struct StackRow: View {
                 .font(Theme.title(16))
                 .foregroundStyle(Theme.ink)
                 .monospacedDigit()
-                .frame(width: 86, alignment: .trailing)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: 86, alignment: .trailing)
 
             if wallet.jarsTake(stack.denomination) {
                 jarMenu
@@ -108,6 +117,11 @@ private struct StackRow: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 11)
+    }
+
+    private var kindLabel: String {
+        let piece = stack.denomination
+        return piece.kind == .bundle ? "bundle of \(piece.hundreds) × \(Denomination.n100.label)" : piece.noun
     }
 
     private var jarMenu: some View {
