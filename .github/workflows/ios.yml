@@ -1,0 +1,87 @@
+# Builds the iOS app and runs its tests on a simulator. Unit tests first:
+# they take seconds and catch most mistakes. Then the UI tests, which drive
+# the real gestures. The server is checked separately (server.yml).
+name: ios
+
+on:
+  pull_request:
+    paths:
+      - CashStack/**
+      - CashStackTests/**
+      - CashStackUITests/**
+      - CashStack.xcodeproj/**
+      - Config/**
+      - .github/workflows/ios.yml
+  push:
+    branches: [main]
+    paths:
+      - CashStack/**
+      - CashStackTests/**
+      - CashStackUITests/**
+      - CashStack.xcodeproj/**
+      - Config/**
+      - .github/workflows/ios.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned, so a runner image update can't change the toolchain under a PR.
+  # Move it on when the image's default Xcode moves on.
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+
+jobs:
+  test:
+    name: "ios: unit and UI tests"
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Simulator builds sign themselves locally; no certificates or Apple
+      # account are needed here.
+      - name: Build
+        run: >
+          xcodebuild build-for-testing
+          -project CashStack.xcodeproj -scheme CashStack
+          -destination "$DESTINATION"
+          -derivedDataPath build
+
+      - name: Unit tests
+        run: >
+          xcodebuild test-without-building
+          -project CashStack.xcodeproj -scheme CashStack
+          -destination "$DESTINATION"
+          -derivedDataPath build
+          -only-testing:CashStackTests
+          -resultBundlePath results/unit.xcresult
+
+      # The screenshot tests take pictures for the README rather than check
+      # anything, so they stay out. Where the pile settles is physics, so a
+      # failing UI test gets one more go before it fails the run; a retried
+      # test still shows in the results.
+      - name: UI tests
+        run: >
+          xcodebuild test-without-building
+          -project CashStack.xcodeproj -scheme CashStack
+          -destination "$DESTINATION"
+          -derivedDataPath build
+          -only-testing:CashStackUITests
+          -skip-testing:CashStackUITests/ScreenshotTests
+          -retry-tests-on-failure -test-iterations 2
+          -resultBundlePath results/ui.xcresult
+
+      - name: Keep the results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: results/
+          retention-days: 14

@@ -14,11 +14,19 @@
 			remoteGlobalIDString = A1000000000000000000T1;
 			remoteInfo = CashStack;
 		};
+		A1000000000000000000X2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000R1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000000000000000T1;
+			remoteInfo = CashStack;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A1000000000000000000F1 /* CashStack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashStack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000F2 /* CashStackUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashStackUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000F3 /* CashStackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashStackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +38,11 @@
 		A1000000000000000000G2 /* CashStackUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CashStackUITests;
+			sourceTree = "<group>";
+		};
+		A1000000000000000000G3 /* CashStackTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashStackTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +62,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000B8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -57,6 +77,7 @@
 			children = (
 				A1000000000000000000G1 /* CashStack */,
 				A1000000000000000000G2 /* CashStackUITests */,
+				A1000000000000000000G3 /* CashStackTests */,
 				A1000000000000000000P1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +87,7 @@
 			children = (
 				A1000000000000000000F1 /* CashStack.app */,
 				A1000000000000000000F2 /* CashStackUITests.xctest */,
+				A1000000000000000000F3 /* CashStackTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -114,6 +136,27 @@
 			productReference = A1000000000000000000F2 /* CashStackUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A1000000000000000000T3 /* CashStackTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000C4 /* Build configuration list for PBXNativeTarget "CashStackTests" */;
+			buildPhases = (
+				A1000000000000000000B7 /* Sources */,
+				A1000000000000000000B8 /* Frameworks */,
+				A1000000000000000000B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1000000000000000000Y2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1000000000000000000G3 /* CashStackTests */,
+			);
+			name = CashStackTests;
+			productName = CashStackTests;
+			productReference = A1000000000000000000F3 /* CashStackTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -128,6 +171,10 @@
 						CreatedOnToolsVersion = 16.3;
 					};
 					A1000000000000000000T2 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = A1000000000000000000T1;
+					};
+					A1000000000000000000T3 = {
 						CreatedOnToolsVersion = 16.3;
 						TestTargetID = A1000000000000000000T1;
 					};
@@ -149,6 +196,7 @@
 			targets = (
 				A1000000000000000000T1 /* CashStack */,
 				A1000000000000000000T2 /* CashStackUITests */,
+				A1000000000000000000T3 /* CashStackTests */,
 			);
 		};
 /* End PBXProject section */
@@ -162,6 +210,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1000000000000000000B6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000B9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -185,6 +240,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -192,6 +254,11 @@
 			isa = PBXTargetDependency;
 			target = A1000000000000000000T1 /* CashStack */;
 			targetProxy = A1000000000000000000X1 /* PBXContainerItemProxy */;
+		};
+		A1000000000000000000Y2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000T1 /* CashStack */;
+			targetProxy = A1000000000000000000X2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -351,6 +418,42 @@
 			};
 			name = Release;
 		};
+		A1000000000000000000D7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bokscot.cashstack.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashStack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashStack";
+			};
+			name = Debug;
+		};
+		A1000000000000000000D8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bokscot.cashstack.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashStack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashStack";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -377,6 +480,15 @@
 			buildConfigurations = (
 				A1000000000000000000D5 /* Debug */,
 				A1000000000000000000D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000C4 /* Build configuration list for PBXNativeTarget "CashStackTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000D7 /* Debug */,
+				A1000000000000000000D8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

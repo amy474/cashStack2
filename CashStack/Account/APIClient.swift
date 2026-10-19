@@ -142,10 +142,10 @@ actor APIClient {
         return decoder
     }()
 
-    init(base: URL = AppConfig.apiBaseURL) {
+    /// `config` is for the unit tests, which answer requests themselves.
+    init(base: URL = AppConfig.apiBaseURL, config: URLSessionConfiguration = .ephemeral) {
         self.base = base
         // No cookies, no cache, nothing written to disk by URLSession.
-        let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 40
         config.waitsForConnectivity = false
         config.httpAdditionalHeaders = [

@@ -20,10 +20,28 @@
                ReferencedContainer = "container:CashStack.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A1000000000000000000T3"
+               BuildableName = "CashStackTests.xctest"
+               BlueprintName = "CashStackTests"
+               ReferencedContainer = "container:CashStack.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference skipped = "NO" parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A1000000000000000000T3"
+               BuildableName = "CashStackTests.xctest"
+               BlueprintName = "CashStackTests"
+               ReferencedContainer = "container:CashStack.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"

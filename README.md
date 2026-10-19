@@ -281,10 +281,23 @@ build gate and maintenance switch, crash reports and alerts:
 cd server && npm test && npm run typecheck
 ```
 
-The app's UI tests drive the demo, launched with `-demo YES`:
+The app's unit tests (`CashStackTests`, Swift Testing) take seconds and check
+the sums: balances breaking into the fewest notes, coins and bundles, 5c
+rounding, splitting keeping value; the wallet's pile always matching the
+selected account through paying, change, cancelling, jars, undo and tips; the
+API client's token refresh, sign-out, offline, update and maintenance answers;
+the status check; and crash reports waiting on disk until the server takes
+them. The network tests answer themselves through a stub `URLProtocol`
+(`StubServer`), each on a made-up host of its own so they run in parallel.
 
 ```bash
-xcodebuild -project CashStack.xcodeproj -scheme CashStack -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+xcodebuild -project CashStack.xcodeproj -scheme CashStack -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:CashStackTests
+```
+
+The UI tests drive the demo, launched with `-demo YES`:
+
+```bash
+xcodebuild -project CashStack.xcodeproj -scheme CashStack -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test -only-testing:CashStackUITests
 ```
 
 `CashStackUITests` drives the real gestures. Every piece of money is named after
@@ -314,7 +327,10 @@ $100 so the piece under the thumb is not in doubt.
 first coin and going straight in after that, undo, notes kept out of the jars,
 saving from the sorted view's menu, and a tip both while paying and from the
 change. The app takes `-till "Pocket Coffee"` as a launch argument to pin the
-till to a café, so there is always a tip jar to test against.
+till to a café, so there is always a tip jar to test against. They find coins
+from one snapshot of the screen rather than asking piece by piece: on a busy
+machine the piece-by-piece way took long enough for the receipt's eight-second
+tip jar to close before a coin was picked up.
 
 `HelpAndLegalUITests` checks Accounts links to help and every policy, with the
 version shown, and that the welcome screen names the terms and privacy policy.
@@ -324,6 +340,13 @@ version shown, and that the welcome screen names the terms and privacy policy.
 in the demo, and that maintenance explains itself but leaves the demo running.
 
 `ScreenshotTests` walks the app through every screen and attaches a shot of each.
+
+**On every pull request**, GitHub Actions checks whatever it touches.
+`server.yml` typechecks and tests `server/` and builds its Docker image.
+`ios.yml` builds the app on macOS 26 with Xcode 26.6, runs the unit tests,
+then the UI tests (not the screenshots, which only take pictures), giving a
+failing UI test one more go since the pile is physics. If it fails, the test
+results are attached to the run.
 
 > If a test fails in a way that makes no sense, delete the app off the simulator
 > first — `xcrun simctl uninstall booted com.bokscot.cashstack`. A stale install
