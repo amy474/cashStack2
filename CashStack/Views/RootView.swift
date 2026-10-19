@@ -92,9 +92,11 @@ struct RootView: View {
                 }
                 .ignoresSafeArea()
 
+                // Already inside the safe area, so only the header's own
+                // height pushes it down.
                 banner
                     .padding(.horizontal, 18)
-                    .padding(.top, safeTop + headerHeight + 14)
+                    .padding(.top, headerHeight + 14)
                     .zIndex(3)
             }
             .onPreferenceChange(DropTargetFrames.self) { frames in
