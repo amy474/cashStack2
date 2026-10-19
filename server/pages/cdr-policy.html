@@ -1,0 +1,58 @@
+<!-- CashStack's Consumer Data Right policy. It has to cover what the CDR
+     Rules ask of a CDR policy, which Basiq's onboarding team will check.
+     {{…}} comes from details.json; [[…]] still needs confirming. -->
+<h1>Consumer Data Right policy</h1>
+<p>Last updated 19 October 2026</p>
+<p>The Consumer Data Right (CDR) lets you share data your bank holds about you with businesses you choose. This policy explains how CashStack, an app by {{business}} (ABN {{abn}}), handles the bank data you share with it. For personal information outside the CDR, such as your email address, see our <a href="/privacy">privacy policy</a>.</p>
+
+<h2>How CashStack receives your data</h2>
+<p>CashStack is not accredited under the CDR itself. It receives your data as a <b>CDR representative</b> of Basiq Pty Ltd, an accredited data recipient ([[Basiq's accreditation number]]). Basiq collects the data from your bank with your consent and passes it to CashStack. Basiq's own CDR policy is at <a href="https://basiq.io">basiq.io</a>.</p>
+
+<h2>What data we receive</h2>
+<p>When you connect a bank, your bank's screens list exactly what you're agreeing to share, and for how long. [[List the data clusters configured in Basiq's consent policy, for example "Account name, type and balance" and "Account numbers and features".]] From that, CashStack uses:</p>
+<ul>
+  <li>the name and type of each account</li>
+  <li>the last four digits of each account number</li>
+  <li>each account's current and available balance</li>
+  <li>which banks you've connected, and when your consent ends</li>
+</ul>
+<p>Basiq can pass on details of credit cards, loans and other accounts too. CashStack discards those straight away and only shows everyday and savings accounts in Australian dollars. It also discards all but the last four digits of each account number. CashStack doesn't ask for your transactions.</p>
+
+<h2>Why we use it</h2>
+<p>Only to show your balance as notes and coins in the app. We don't use your CDR data for marketing, we don't sell it, we don't use it to make decisions about you, and we don't de-identify it for any other use.</p>
+
+<h2>How we hold it</h2>
+<p>We don't store your CDR data. CashStack asks Basiq for it when you open the app or refresh, keeps it in our server's memory for up to a minute so a second request doesn't go back to your bank, and sends it to your phone. Your phone keeps it in memory while CashStack is open. None of it is written to our database.</p>
+<p>Our servers are in Sydney, Australia, and connections to and from them are encrypted.</p>
+
+<h2>Who we disclose it to</h2>
+<p>Nobody. We don't disclose your CDR data to any other person or business, in Australia or overseas.</p>
+<p>Our servers run on <b>Fly.io</b>, which hosts them in Sydney. CDR data passes through those servers in memory but isn't stored there. [[Confirm with Basiq whether Fly.io counts as an outsourced service provider under the CDR Rules, and if so, describe what it does here.]]</p>
+
+<h2>When sharing ends</h2>
+<p>Your consent ends when you stop sharing, when it expires, or when you delete your CashStack account. When it ends:</p>
+<ul>
+  <li>Basiq tells us straight away and we drop anything held in memory for you.</li>
+  <li>There is nothing else for us to delete, because we never stored it.</li>
+  <li>We delete redundant data rather than de-identifying it.</li>
+</ul>
+<p>Basiq deletes the data it collected for CashStack in line with its own CDR policy. Deleting your CashStack account deletes your Basiq user and all your bank connections.</p>
+<p>We keep a record of each consent being given, extended and withdrawn, as the CDR Rules require. It holds identifiers and times, not your bank data.</p>
+
+<h2>Managing and withdrawing consent</h2>
+<ul>
+  <li><b>In CashStack:</b> tap the account name at the top. Under <b>Data sharing</b> you can stop sharing a bank, see what you've agreed to, extend it, or withdraw it.</li>
+  <li><b>From your bank:</b> every bank in the CDR has a data-sharing dashboard in its app or internet banking.</li>
+  <li><b>By email:</b> write to {{email}} and we'll withdraw it for you.</li>
+</ul>
+<p><a href="/data-sharing">Step-by-step instructions</a></p>
+
+<h2>Seeing or correcting your data</h2>
+<p>Your CDR data comes from your bank, so if something is wrong, your bank can correct it. Once it does, CashStack shows the corrected figures the next time it reads your balance. To ask what CDR data CashStack has received about you, email {{email}}.</p>
+
+<h2>Complaints</h2>
+<p>Email {{email}}, or write to {{business}}, {{address}}. We'll acknowledge your complaint within [[one business day]] and aim to resolve it within [[30 days]]. We'll tell you what we found and what we've done about it.</p>
+<p>If you're not satisfied, you can go to the Australian Financial Complaints Authority at <a href="https://www.afca.org.au">afca.org.au</a> or on 1800 931 678, or to the Office of the Australian Information Commissioner at <a href="https://www.oaic.gov.au">oaic.gov.au</a> or on 1300 363 992. [[Confirm with Basiq which external dispute resolution scheme applies to its CDR representatives.]]</p>
+
+<h2>Changes</h2>
+<p>If we change this policy, we'll update the date at the top. If a change affects how we handle your CDR data, we'll tell you in the app before it applies.</p>

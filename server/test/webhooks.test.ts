@@ -94,7 +94,7 @@ describe('Basiq webhooks', () => {
 describe('every response', () => {
   test('is uncacheable and locked down', async () => {
     const t = await testApp();
-    for (const url of ['/healthz', '/data-sharing', '/nowhere']) {
+    for (const url of ['/healthz', '/data-sharing', '/privacy', '/nowhere']) {
       const res = await t.app.inject({ method: 'GET', url });
       assert.equal(res.headers['cache-control'], 'no-store', url);
       assert.equal(res.headers['x-content-type-options'], 'nosniff', url);
