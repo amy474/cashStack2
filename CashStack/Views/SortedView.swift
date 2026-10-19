@@ -17,7 +17,7 @@ struct SortedView: View {
                 Color.clear.frame(height: topInset)
 
                 if wallet.stacks.isEmpty {
-                    EmptyWallet()
+                    EmptyPile(reason: wallet.emptyPileReason ?? .nothing)
                         .padding(.top, 70)
                 } else {
                     if !wallet.bundles.isEmpty {
@@ -184,18 +184,3 @@ private struct TotalRow: View {
     }
 }
 
-private struct EmptyWallet: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "banknote")
-                .font(.system(size: 26, weight: .light))
-            Text("No cash in the wallet")
-                .font(Theme.title(16))
-            Text("Pick another account to fill it")
-                .font(Theme.body(13))
-                .foregroundStyle(Theme.inkSoft)
-        }
-        .foregroundStyle(Theme.ink)
-        .frame(maxWidth: .infinity)
-    }
-}

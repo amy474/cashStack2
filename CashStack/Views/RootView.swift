@@ -27,7 +27,6 @@ struct RootView: View {
     /// A jar that needs telling where its money goes.
     @State private var setup: JarSetup?
     @State private var tipChooserOpen = false
-    @State private var coachDismissed = false
 
     /// Every header is the same height, so the pay line never has to move.
     private let headerHeight: CGFloat = 194
@@ -60,6 +59,14 @@ struct RootView: View {
 
                 if wallet.phase == .loading {
                     LoadingPile().ignoresSafeArea()
+                }
+
+                if mode == .loose, let reason = wallet.emptyPileReason {
+                    EmptyPile(reason: reason,
+                              onChooseAccount: wallet.accounts.count > 1 ? { showAccounts = true } : nil)
+                        .padding(.top, safeTop + headerHeight)
+                        .padding(.bottom, safeBottom + footerHeight)
+                        .transition(.opacity)
                 }
 
                 if wallet.isLive && wallet.phase == .ready && wallet.accounts.isEmpty {
@@ -250,13 +257,13 @@ struct RootView: View {
                 if wallet.errorMessage == message { wallet.errorMessage = nil }
             }
         } else if showsCoachMark {
-            JarCoachMark { coachDismissed = true }
+            JarCoachMark { wallet.coachMarkSeen = true }
                 .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
     private var showsCoachMark: Bool {
-        !coachDismissed && wallet.drops.isEmpty && wallet.phase == .ready && mode == .loose
+        !wallet.coachMarkSeen && wallet.drops.isEmpty && wallet.phase == .ready && mode == .loose
             && wallet.request == nil && held == nil && landed == nil
             && !wallet.visibleJars.isEmpty && !wallet.coins.isEmpty
     }
@@ -316,7 +323,7 @@ struct RootView: View {
                 return
             }
             took = wallet.drop(denomination, into: jar)
-            if took { coachDismissed = true }
+            if took { wallet.coachMarkSeen = true }
         }
         // The scene has already let go of the piece. If the wallet would not
         // take it after all, it falls back into the pile.
@@ -338,14 +345,14 @@ struct RootView: View {
             setup = JarSetup(jar: jar, pending: denomination)
         } else if wallet.drop(denomination, into: jar) {
             Haptics.drop()
-            coachDismissed = true
+            wallet.coachMarkSeen = true
         }
     }
 
     private func finishSetup(_ setup: JarSetup) {
         if let pending = setup.pending, wallet.drop(pending, into: setup.jar) {
             Haptics.drop()
-            coachDismissed = true
+            wallet.coachMarkSeen = true
         }
         self.setup = nil
     }
@@ -719,23 +726,55 @@ private struct PayHeader<TipJarView: View>: View {
 
 // MARK: - No bank yet
 
-/// Signed in, but nothing connected — or everything disconnected.
+/// Signed in, but nothing connected — or everything disconnected. Someone
+/// whose consent ran out after a year shouldn't be greeted as if they were
+/// new, so the server is asked which it is.
 private struct EmptyWallet: View {
     @EnvironmentObject private var wallet: WalletStore
     @EnvironmentObject private var session: SessionStore
     @Environment(\.webAuthenticationSession) private var web
     @State private var working = false
     @State private var message: String?
+    @State private var bank: Me.Bank?
+
+    private enum Situation { case unreachable, new, stoppedSharing, nothingShared }
+
+    private var situation: Situation {
+        if wallet.loadFailed { return .unreachable }
+        guard let bank, bank.linked else { return .new }
+        return bank.consent == nil ? .stoppedSharing : .nothingShared
+    }
+
+    private var title: String {
+        switch situation {
+        case .unreachable: "Couldn't reach your bank"
+        case .new: "Nothing in your wallet yet"
+        case .stoppedSharing: "Your bank stopped sharing"
+        case .nothingShared: "No accounts to show"
+        }
+    }
+
+    private var detail: String {
+        switch situation {
+        case .unreachable:
+            "Check your connection and try again. Nothing has changed with your accounts."
+        case .new:
+            "Connect a bank and its balance turns into cash here. CashStack can only read it — your money stays where it is."
+        case .stoppedSharing:
+            "Sharing lasts up to 12 months, and ends early if it's stopped from your bank. Connect again to fill your wallet."
+        case .nothingShared:
+            "Your bank is connected but isn't sharing an everyday or savings account right now. Connect again to choose what it shares."
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Spacer(minLength: 0)
-            Text(wallet.loadFailed ? "Couldn't reach your bank" : "Nothing in your wallet yet")
+            Text(title)
                 .font(Theme.display(28))
                 .foregroundStyle(Theme.ink)
-            Text(wallet.loadFailed
-                 ? "Check your connection and try again. Nothing has changed with your accounts."
-                 : "Connect a bank and its balance turns into cash here. CashStack can only read it — your money stays where it is.")
+                .accessibilityIdentifier("emptyWalletTitle")
+            Text(detail)
                 .font(Theme.body(15))
                 .foregroundStyle(Theme.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
@@ -752,7 +791,7 @@ private struct EmptyWallet: View {
                 }
                 .accessibilityIdentifier("retryLoad")
             } else {
-                PrimaryPillButton(title: "Connect a bank", systemImage: "link") {
+                PrimaryPillButton(title: situation == .new ? "Connect a bank" : "Connect again", systemImage: "link") {
                     working = true
                     message = nil
                     Task {
@@ -770,6 +809,10 @@ private struct EmptyWallet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.ground)
+        .task(id: wallet.loadFailed) {
+            guard !wallet.loadFailed, let me: Me = try? await session.api.get("v1/me") else { return }
+            bank = me.bank
+        }
     }
 }
 

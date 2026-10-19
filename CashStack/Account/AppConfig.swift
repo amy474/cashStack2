@@ -67,10 +67,16 @@ enum Preference {
     static let selectedAccountID = "selectedAccountID"
     /// Set on first launch, so a reinstall can be told apart from a relaunch.
     static let installed = "installed"
+    /// Where each jar sends its money, which are switched on, and the limits.
+    static let jarSettings = "jarSettings"
+    /// The first-run jar hint has been seen.
+    static let jarCoachSeen = "jarCoachSeen"
 
-    static func clearAccount() {
-        for key in [lockWithFaceID, lockDecided, onboarded, selectedAccountID] {
-            UserDefaults.standard.removeObject(forKey: key)
+    /// Everything above that belongs to the person signed in. The jar
+    /// settings name their accounts, so they go too.
+    static func clearAccount(_ defaults: UserDefaults = .standard) {
+        for key in [lockWithFaceID, lockDecided, onboarded, selectedAccountID, jarSettings, jarCoachSeen] {
+            defaults.removeObject(forKey: key)
         }
     }
 }

@@ -172,6 +172,18 @@ edges and the shine reads as a square sitting on top of the money.
 **Motion** is read at 60Hz and handed to the scene by closure rather than
 `@Published`, which would re-render the whole SwiftUI tree sixty times a second.
 
+**Reduce Motion** turns all of that off, the way iOS turns off its own tilt
+effects: the pile falls straight down instead of following the phone, a shake
+does nothing, and the shine stops sweeping, in the pile and in the sorted
+view's thumbnails. The scene listens for the setting changing while it runs.
+
+**Empty states say why.** An account at $0, under 5c, or overdrawn shows what's
+going on in place of the pile, with a way to switch accounts; **Pay at till**
+waits until there's cash. With no accounts at all, the wallet asks the server
+whether this is someone new, someone whose bank stopped sharing (consent
+lasts up to 12 months), or a bank that's connected but sharing nothing
+usable, and says so, with **Connect again** rather than a welcome.
+
 ## Real banks
 
 ```
@@ -288,8 +300,9 @@ the sums: balances breaking into the fewest notes, coins and bundles, 5c
 rounding, splitting keeping value; the wallet's pile always matching the
 selected account through paying, change, cancelling, jars, undo and tips; the
 API client's token refresh, sign-out, offline, update and maintenance answers;
-the status check; and crash reports waiting on disk until the server takes
-them. The network tests answer themselves through a stub `URLProtocol`
+the status check; crash reports waiting on disk until the server takes
+them; what the real wallet remembers between launches and the demo doesn't;
+and why an empty pile is empty. The network tests answer themselves through a stub `URLProtocol`
 (`StubServer`), each on a made-up host of its own so they run in parallel.
 
 ```bash
@@ -388,8 +401,12 @@ The App Privacy declaration, review notes and Apple keys are covered in
   currency means another list and the breakdown maths works unchanged. Cash
   settles in 5c steps, since Australia withdrew the 1c and 2c — `Money.cashable`
   is what keeps the pile and the balance honest about that.
-- The jars, their settings and the practice history aren't persisted.
-  Relaunching resets them; the account you chose and your session are kept.
+- With a real bank, the account you chose, your session, the jar settings
+  (destinations, which jars are on, the limits) and the seen first-run hint
+  are kept. What went in the jars and what was paid at the till are not: they
+  were practice on a balance that's read afresh at the next launch, so taking
+  them back then would hand back money the balance already has. The demo
+  keeps nothing and starts fresh every launch.
 - The funds and charities are made up, like the banks. Investing and donating
   stop at the pool: there is no broker or charity on the other end.
 - Bundles stop at $10,000. $100,000 is ten bricks; a balance in the millions
