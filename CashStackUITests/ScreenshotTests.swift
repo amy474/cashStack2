@@ -9,6 +9,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testCaptureEveryScreen() {
         let app = XCUIApplication()
+        app.launchArguments = ["-demo", "YES"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
         Thread.sleep(forTimeInterval: 3.0)
@@ -57,6 +58,7 @@ final class ScreenshotTests: XCTestCase {
     /// Double tap breaks a piece into smaller money, right where it lay.
     func testCaptureSplit() {
         let app = XCUIApplication()
+        app.launchArguments = ["-demo", "YES"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
 
@@ -79,6 +81,7 @@ final class ScreenshotTests: XCTestCase {
     /// Catches a note in mid-air, above the pay line and behind the top glass.
     func testCaptureMidSwipe() {
         let app = XCUIApplication()
+        app.launchArguments = ["-demo", "YES"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
         Thread.sleep(forTimeInterval: 3.0)
@@ -113,7 +116,7 @@ final class ScreenshotTests: XCTestCase {
     /// its money goes, the undo toast, the settings, and both tip jars.
     func testCaptureCoinJars() {
         let app = XCUIApplication()
-        app.launchArguments = ["-till", "Pocket Coffee"]
+        app.launchArguments = ["-demo", "YES", "-till", "Pocket Coffee"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
         Thread.sleep(forTimeInterval: 3.0)

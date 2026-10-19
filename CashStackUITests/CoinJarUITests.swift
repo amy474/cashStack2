@@ -17,7 +17,7 @@ final class CoinJarUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         // Pin the till to a café, so there is always a tip jar.
-        app.launchArguments = ["-till", "Pocket Coffee"]
+        app.launchArguments = ["-demo", "YES", "-till", "Pocket Coffee"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
         Thread.sleep(forTimeInterval: 3.0)   // let the pile fall and settle

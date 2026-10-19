@@ -13,6 +13,7 @@ final class PaymentFlowUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        app.launchArguments = ["-demo", "YES"]
         app.launch()
         XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20),
                       "The wallet should finish loading and offer the till")

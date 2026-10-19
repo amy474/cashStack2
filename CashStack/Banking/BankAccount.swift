@@ -21,6 +21,8 @@ struct LinkedAccount: Identifiable, Hashable {
     let nickname: String
     let maskedNumber: String        // "•••• 4417"
     var availableMinor: Int
+    /// When the bank last reported this balance. Demo accounts have none.
+    var lastUpdated: Date? = nil
 }
 
 struct PaymentRequest: Identifiable, Equatable {

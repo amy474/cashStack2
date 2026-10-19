@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Where the CashStack API lives. Set per configuration by CASHSTACK_API_URL. -->
+	<key>CashStackAPIURL</key>
+	<string>$(CASHSTACK_API_URL)</string>
+	<!-- Lets a Debug build reach the API running on this Mac. Has no effect on
+	     internet traffic, which stays HTTPS-only. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

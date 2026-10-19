@@ -5,18 +5,34 @@ notes and coins, in multiples, piled up and obeying gravity. Tip the phone and
 the pile sloshes. To pay, you hold a note and swipe it off the top of the
 screen, and your change falls back down.
 
-This is a working demo: a native iOS app, TestFlight-ready, with the bank layer
-behind a protocol so real institutions can be plugged in.
+It is a native iOS app with a small backend. Sign in with Apple, lock it with
+Face ID, connect your bank through Australia's Consumer Data Right (via Basiq),
+and your real balance becomes the pile. CashStack is read-only, so paying at
+the till and the jars are practice on that real balance. There's also a demo
+with pretend banks, for trying it without connecting anything.
 
 ![Loose and sorted](docs/screens.png)
 
 ## Running it
 
+The app talks to the API in `server/`. Start it first. With no configuration
+it uses a fake Basiq and an embedded database, which is enough for the whole
+flow, consent screen included:
+
+```bash
+cd server && npm install && DEV_LOGIN=1 npm run dev
+```
+
+Then open the app:
+
 ```bash
 open CashStack.xcodeproj
 ```
 
-Pick an iPhone simulator and hit run. From the command line:
+Pick an iPhone simulator and hit run. Debug builds talk to `http://127.0.0.1:8080`
+and offer **Developer sign-in** on the first screen, since Sign in with Apple
+needs a signed-in Apple ID. **Try it with pretend money** skips all of it. From
+the command line:
 
 ```bash
 xcodebuild -project CashStack.xcodeproj -scheme CashStack -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
@@ -151,34 +167,79 @@ edges and the shine reads as a square sitting on top of the money.
 **Motion** is read at 60Hz and handed to the scene by closure rather than
 `@Published`, which would re-render the whole SwiftUI tree sixty times a second.
 
-## Connecting real banks
+## Real banks
 
-Everything above `BankDataSource` is ignorant of where a balance came from:
-
-```swift
-protocol BankDataSource: AnyObject {
-    var institution: Institution { get }
-    func connect() async throws
-    func accounts() async throws -> [LinkedAccount]
-    func debit(accountID: String, minor: Int) async throws
-    func credit(accountID: String, minor: Int) async throws
-}
+```
+CashStack (iOS)                     server/ (Fly.io, Sydney)             Basiq (CDR)
+───────────────                     ────────────────────────             ───────────
+Sign in with Apple ──identity token──▶ verify with Apple's keys + nonce
+                   ◀─access + refresh── opaque tokens, stored as hashes
+Keychain (behind Face ID) holds the refresh token
+"Connect a bank" ──────────────────▶ consent session ─────────────────▶ client token
+system web sheet ◀───────────────── Basiq consent URL
+   … Basiq's screens, the bank's login …
+Basiq redirects ───────────────────▶ /v1/consent/return (single-use state)
+cashstack://consent/complete ◀────── session id only
+"wait" ────────────────────────────▶ poll jobs ───────────────────────▶ accounts
+pile ◀───────────────────────────── name, last four digits, balance
 ```
 
-`WalletStore` holds an array of these and lists every account they return, so
-linking another bank is just "add another source". Only the selected account
-fills the pile and is debited when you pay. To go live, write one
-conforming type per route — an Open Banking AISP (TrueLayer, Plaid, Yapily) or a
-bank's own API — have `connect()` run the consent flow, and pass it to
-`WalletStore.link(_:)`. Nothing else changes. The demo ships three
-`DemoBankDataSource` instances with in-memory balances and a deliberate delay so
-the loading states are real.
+**The server holds the only secret that matters.** The Basiq API key never
+leaves `server/`. The app gets a short-lived access token and a refresh token
+that rotates on every use. Refreshing with an already-used refresh token
+revokes the whole sign-in, so a stolen token works at most once. Tokens are
+stored only as SHA-256 hashes.
 
-`debit` is where a demo and a real wallet part company: here it decrements a
-number, whereas a shipping app would initiate a payment and only move the cash
-on screen once the payment is confirmed.
+**No financial data is stored.** Balances are read from Basiq when the app
+asks, cached for a minute in memory, and never written to the database.
+Stopping sharing or deleting the account therefore leaves nothing behind on our
+side. The database holds users, sessions, consent attempts, webhook ids and an
+audit log of ids and events.
+
+**Read-only.** `LiveBankDataSource` conforms to the same `BankDataSource`
+protocol as the demo. Its `debit` and `credit` do nothing, so the till and the
+jars spend a local copy of the real balance. The header shows how much has been
+"spent in practice", and the next refresh puts the bank's figure back.
+
+**Face ID is enforced by the Keychain, not drawn on top.** With the lock on,
+the refresh token is stored with `.userPresence` access control, so it can only
+be read after Face ID or the passcode. The access token lives in memory and is
+dropped when the app locks, a minute after leaving it. The wallet is covered
+whenever the app isn't frontmost, so balances don't show in the app switcher.
+
+**Data sharing is in the app.** Accounts › Data sharing lists each connected
+bank and when sharing ends, with **Stop sharing**, Basiq's **Manage data
+sharing** dashboard, and **Extend sharing** near expiry. **Delete my account and
+data** removes the Basiq user, every connection and every row here.
+
+```
+server/
+  src/app.ts             Fastify app: rate limits, security headers, error shapes
+  src/auth/              Sign in with Apple, rotating sessions
+  src/basiq/             The real Basiq client, a fake for dev and tests, webhook signatures
+  src/routes/            auth, me, consent, accounts, connections, webhooks, /data-sharing
+  migrations/            Postgres schema
+  test/                  node --test, on an embedded Postgres
+  Dockerfile, fly.toml   Deploys to Fly's Sydney region
+CashStack/
+  Account/               API client, Keychain, session, live bank source, consent flow
+  Onboarding/            Welcome, Face ID, connect a bank, pick the account, lock screen
+```
+
+What it takes to put real customers on it (Basiq, the CDR representative
+agreement, Apple keys, Fly) is in [docs/going-live.md](docs/going-live.md).
 
 ## Tests
+
+The server's tests run against an embedded Postgres and a fake Basiq. They
+cover Apple token verification, session rotation and reuse, the consent round
+trip, account filtering and masking, webhook signatures, and account deletion:
+
+```bash
+cd server && npm test && npm run typecheck
+```
+
+The app's UI tests drive the demo, launched with `-demo YES`:
 
 ```bash
 xcodebuild -project CashStack.xcodeproj -scheme CashStack -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
@@ -222,17 +283,17 @@ The project archives for device as-is; it only needs signing details.
 3. **Product ▸ Archive**, then **Distribute App ▸ TestFlight**.
 
 Already in place: portrait-only, light appearance, iOS 17 minimum, a 1024px app
-icon in the asset catalog, no third-party dependencies, and no private API use.
-CoreMotion's device motion needs no usage description, so there is no extra
-privacy string to write.
+icon in the asset catalog, no third-party dependencies, no private API use, the
+Sign in with Apple entitlement and a Face ID usage string. Release builds talk
+to `https://cashstack-api.fly.dev` (`CASHSTACK_API_URL` in the build settings).
 
-Before a public release you would still need an App Privacy declaration covering
-the financial data the bank connections read.
+The App Privacy declaration, review notes and Apple keys are covered in
+[docs/going-live.md](docs/going-live.md).
 
-## What this demo does not do
+## What it does not do
 
-- No real bank connection, no consent flow, no payment rails — `debit` moves a
-  number in memory.
+- No payment rails. Real balances are read, never moved: paying and the jars are
+  practice. Moving money would need a PayTo/NPP partner and licensing advice.
 - Splitting stops at `Money.maxLoosePieces` (120). Without a cap, a determined
   thumb could turn a hundred dollars into two thousand 5c coins and the physics
   would grind to a halt.
@@ -240,9 +301,10 @@ the financial data the bank connections read.
   currency means another list and the breakdown maths works unchanged. Cash
   settles in 5c steps, since Australia withdrew the 1c and 2c — `Money.cashable`
   is what keeps the pile and the balance honest about that.
-- Nothing is persisted. Relaunching resets the wallet, the jars and their
-  settings.
+- The jars, their settings and the practice history aren't persisted.
+  Relaunching resets them; the account you chose and your session are kept.
 - The funds and charities are made up, like the banks. Investing and donating
   stop at the pool: there is no broker or charity on the other end.
-- Very large balances mean very many notes. A real build would bundle them
-  above some count rather than simulating three hundred bodies.
+- Very large balances mean very many notes. With real savings balances this
+  now matters: bundling above some count, rather than simulating hundreds of
+  bodies, is the next thing to build.
