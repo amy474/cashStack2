@@ -32,6 +32,17 @@ describe('signing in', () => {
     }
   });
 
+  test('an identity token and nonce work once; presented again they are refused', async () => {
+    const payload = await t.apple.token({ sub: 'apple-replay' });
+    const first = await t.app.inject({ method: 'POST', url: '/v1/auth/apple', payload });
+    assert.equal(first.statusCode, 200);
+    const again = await t.app.inject({ method: 'POST', url: '/v1/auth/apple', payload });
+    assert.equal(again.statusCode, 401);
+    assert.equal(again.json().error, 'apple_rejected');
+    const sessions = await t.db.query("select s.id from sessions s join users u on u.id = s.user_id where u.apple_sub = 'apple-replay'");
+    assert.equal(sessions.rows.length, 1, 'the replay got no session');
+  });
+
   test('identity tokens that are not exactly right are refused', async () => {
     const { privateKey: stranger } = await generateKeyPair('RS256');
     const bad = [

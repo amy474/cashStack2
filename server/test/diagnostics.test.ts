@@ -50,8 +50,43 @@ describe('crash reports', () => {
     await t.app.inject({ method: 'POST', url: '/v1/diagnostics', payload: { hangDiagnostics: [hang] } });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(t.alerts.length, 2, t.alerts.join('\n'));
-    assert.match(t.alerts[0]!, /CashStack 0\.2 \(14\) crashed: EXC_BREAKPOINT \(SIGTRAP\) on iPhone17,1/);
+    assert.match(t.alerts[0]!, /CashStack `0\.2 \(14\)` crashed: `EXC_BREAKPOINT \(SIGTRAP\)` on `iPhone17,1`/);
     assert.match(t.alerts[1]!, /EXC_BAD_ACCESS \(SIGSEGV\)/);
+    await t.close();
+  });
+
+  test("can't put links, mentions or terminal escapes into alerts or the report", async () => {
+    const t = await testApp();
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/v1/diagnostics',
+      payload: { crashDiagnostics: [{ diagnosticMetaData: {
+        appVersion: '<!channel>', deviceType: '<https://evil.example|Sign in>', osVersion: '`x` & y',
+        terminationReason: 'boom\u001b]52;c;cm0gLXJmIH4=\u0007',
+      } }] },
+    });
+    assert.equal(res.statusCode, 202);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(t.alerts.length, 1);
+    assert.ok(!/[<>&\u001b\u0007]/.test(t.alerts[0]!), t.alerts[0]!);
+    assert.equal(t.alerts[0]!.split('`').length, 11, 'each outside value stays in its own code span');
+    const { rows } = await t.db.query<{ summary: string }>('select summary from diagnostics');
+    assert.ok(!/[\u0000-\u001f]/.test(rows[0]!.summary), 'no control characters reach the terminal report');
+    await t.close();
+  });
+
+  test('stop being stored past a daily ceiling', async () => {
+    const t = await testApp();
+    await t.db.query(
+      `insert into diagnostics (kind, summary, detail, received_at)
+       select 'hang', 'hang', '{}'::jsonb, $1 from generate_series(1, 2000)`,
+      [t.clock.now],
+    );
+    const res = await t.app.inject({ method: 'POST', url: '/v1/diagnostics', payload: { hangDiagnostics: [hang] } });
+    assert.equal(res.statusCode, 429, 'the app keeps the report and tries again later');
+    t.clock.advance(86_400_000 + 1);
+    const later = await t.app.inject({ method: 'POST', url: '/v1/diagnostics', payload: { hangDiagnostics: [hang] } });
+    assert.equal(later.statusCode, 202);
     await t.close();
   });
 
@@ -112,6 +147,17 @@ describe('alerts', () => {
     alerts.notify('a', 'an hour later');
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(sent, ['first', 'other', 'an hour later']);
+  });
+
+  test('however many kinds of problem there are, only so many go out an hour', async () => {
+    const sent: string[] = [];
+    let now = 0;
+    const alerts = new Alerts((text) => { sent.push(text); }, () => now, 60 * 60_000, 3);
+    for (let i = 0; i < 10; i++) alerts.notify(`kind-${i}`, `alert ${i}`);
+    now += 60 * 60_000;
+    alerts.notify('kind-late', 'an hour later');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(sent, ['alert 0', 'alert 1', 'alert 2', 'an hour later']);
   });
 
   test('go nowhere without a webhook', () => {
