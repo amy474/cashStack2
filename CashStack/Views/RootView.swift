@@ -441,7 +441,7 @@ struct RootView: View {
                         .background(PillBackground())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Tidy the pile into the fewest notes and coins")
+                .accessibilityLabel("Tidy the pile into the fewest pieces")
 
                 PrimaryPillButton(title: "Pay at till", systemImage: "wave.3.right") {
                     payAtTill()

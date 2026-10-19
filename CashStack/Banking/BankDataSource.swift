@@ -104,7 +104,11 @@ enum DemoBanks {
             DemoBankDataSource(institution: .meridian, accounts: [
                 LinkedAccount(id: "meridian-saver", institution: .meridian,
                               nickname: "Savings", maskedNumber: "•••• 1180",
-                              availableMinor: 120_500)
+                              availableMinor: 120_500),
+                // Big enough that the pile comes in bundles: eight $10,000 bricks.
+                LinkedAccount(id: "meridian-nest-egg", institution: .meridian,
+                              nickname: "Nest egg", maskedNumber: "•••• 2051",
+                              availableMinor: 8_000_000)
             ], latency: .milliseconds(300))
         ]
     }

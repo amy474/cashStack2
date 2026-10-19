@@ -78,6 +78,37 @@ final class ScreenshotTests: XCTestCase {
         capture("11-after-split", app)
     }
 
+    /// A big balance: $80,000 as bricks, a brick broken into bundles, the
+    /// sorted view, and the change from paying for a book with a brick.
+    func testCaptureBundles() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "YES", "-account", "meridian-nest-egg", "-till", "Paperbark Books"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Pay at till"].waitForExistence(timeout: 20))
+        Thread.sleep(forTimeInterval: 3.0)
+        capture("12-bricks", app)
+
+        let brick = app.otherElements
+            .matching(NSPredicate(format: "label == %@", "$10,000 bundle")).allElementsBoundByIndex
+            .max(by: { $0.frame.midY < $1.frame.midY })
+        brick?.doubleTap()
+        Thread.sleep(forTimeInterval: 2.5)
+        capture("13-brick-broken", app)
+
+        app.buttons["Sorted"].tap()
+        Thread.sleep(forTimeInterval: 2.0)
+        capture("14-sorted-bundles", app)
+        app.buttons["Loose"].tap()
+        app.buttons["Tidy the pile into the fewest pieces"].tap()
+        Thread.sleep(forTimeInterval: 3.0)
+
+        app.buttons["Pay at till"].tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        handOverLowest(of: ["$10,000 bundle"], app)
+        Thread.sleep(forTimeInterval: 6.0)
+        capture("15-change-from-a-brick", app)
+    }
+
     /// Catches a note in mid-air, above the pay line and behind the top glass.
     func testCaptureMidSwipe() {
         let app = XCUIApplication()
