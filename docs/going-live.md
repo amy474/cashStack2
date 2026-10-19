@@ -41,9 +41,14 @@ CashStack doesn't hold its own CDR accreditation; it receives data as Basiq's
 
 - Sign Basiq's CDR representative arrangement. Basiq's onboarding team walks
   through the obligations; their go-live checklist asks for a UX review too.
-- Publish a **CDR policy** and a **privacy policy** for CashStack, and link both
-  from the App Store listing. `/data-sharing` covers how to withdraw consent;
-  it isn't a policy.
+- Finish the **CDR policy**, **privacy policy** and **terms**. Drafts are in
+  `server/pages` and already served at `/cdr-policy`, `/privacy` and `/terms`;
+  `/support` is the help page. Fill in `server/pages/details.json` (business
+  name, ABN, support email, postal address, state), then work through every
+  highlighted `[[…]]` gap — several are questions for Basiq — and have a
+  lawyer read all three. Until nothing is highlighted, each page carries a
+  **Draft** notice and the server logs `public pages still have gaps to fill`
+  at startup.
 - Remove the sandbox test users from the Basiq app before production is
   switched on — they become billable.
 
@@ -96,9 +101,15 @@ or with `DEV_LOGIN` set. If you pick another app name, change `PUBLIC_URL` in
    relay address. If Basiq emails consumers (CDR receipts, consent notices),
    register Basiq's sending domain under **Sign in with Apple for Email
    Communication**, or those emails won't arrive. Ask Basiq which domain.
-4. **App Privacy**: declare *Financial Info* (account balances, linked to the
-   user, used for app functionality) and *Contact Info → Email*. No tracking.
-5. **App Review**: reviewers can't connect a bank. Point them at
+4. **App Privacy**: declare *Financial Info* (account balances), *Contact
+   Info → Email Address* and *Identifiers → User ID*, each linked to the user
+   and used for app functionality. No tracking. These answers have to match
+   `CashStack/PrivacyInfo.xcprivacy`, which the upload is checked against; if
+   the app starts collecting something new, change both.
+5. **App Store listing**: Privacy Policy URL
+   `https://cashstack-api.fly.dev/privacy`, Support URL
+   `https://cashstack-api.fly.dev/support`.
+6. **App Review**: reviewers can't connect a bank. Point them at
    **Try it with pretend money** in the review notes.
 
 ## 5. Before the first real customer
@@ -109,7 +120,10 @@ or with `DEV_LOGIN` set. If you pick another app name, change `PUBLIC_URL` in
       `GET /notifications/webhooks/{id}/stats`).
 - [ ] `fly logs` show no `unhandled error` lines, and no tokens or query strings.
 - [ ] Basiq production switched on; sandbox users removed.
-- [ ] CDR policy and privacy policy published and linked.
+- [ ] Policies finished and reviewed: no **Draft** notice on `/privacy`,
+      `/cdr-policy`, `/terms` or `/support`, and no
+      `public pages still have gaps to fill` line in `fly logs`.
+- [ ] Privacy Policy and Support URLs set in App Store Connect.
 
 ## What this release does not do
 
