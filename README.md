@@ -259,7 +259,9 @@ server/
   pages/                 Privacy policy, CDR policy, terms, help; details.json
   migrations/            Postgres schema
   test/                  node --test, on an embedded Postgres
-  Dockerfile, fly.toml   Deploys to Fly's Sydney region
+  Dockerfile, fly.toml   Deploys to Fly's Sydney region; fly.staging.toml for staging
+  backup/                Nightly encrypted pg_dump to an S3 bucket in Sydney, and restore
+scripts/release.sh       Test, archive, upload to TestFlight, tag
 CashStack/
   Account/               API client, Keychain, session, live bank source, consent flow
   Onboarding/            Welcome, Face ID, connect a bank, pick the account, lock screen
@@ -354,14 +356,17 @@ results are attached to the run.
 
 ## TestFlight
 
-The project archives for device as-is; it only needs signing details.
+```bash
+scripts/release.sh staging       # CashStack Staging (com.bokscot.cashstack.staging), against staging
+scripts/release.sh production    # CashStack (com.bokscot.cashstack), against production, from main
+```
 
-1. In **Signing & Capabilities**, pick your team. The bundle id is
-   `com.bokscot.cashstack` — change it to one your team owns.
-2. Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the build settings.
-   `CURRENT_PROJECT_VERSION` must go up with every upload: it's the build
-   number the server's `MIN_APP_BUILD` compares against.
-3. **Product ▸ Archive**, then **Distribute App ▸ TestFlight**.
+The script runs the unit tests, archives with the build number set to the UTC
+time (so it always goes up, which `MIN_APP_BUILD` relies on), uploads to
+TestFlight and tags the commit. `--dry-run` prints the steps. There are three
+build configurations: **Debug** talks to the server on this Mac, **Staging**
+to `cashstack-api-staging` on Basiq's sandbox, **Release** to production; the
+*CashStack Staging* scheme runs and archives the Staging one.
 
 Already in place: portrait-only, light appearance, iOS 17 minimum, a 1024px app
 icon in the asset catalog, no third-party dependencies, no private API use, the

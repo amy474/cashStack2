@@ -51,3 +51,6 @@ jobs:
           persist-credentials: false
       # The same image Fly builds on deploy, so a broken Dockerfile fails here first.
       - run: docker build server/
+      # And the nightly backup job's image.
+      - run: docker build server/backup/
+      - run: bash -n server/backup/backup.sh && bash -n server/backup/restore.sh

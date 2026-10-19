@@ -1,0 +1,48 @@
+# Staging: the same server, against Basiq's sandbox, for the Staging build of
+# the app (com.bokscot.cashstack.staging). It runs in production mode, so the
+# same safety checks apply — a sandbox Basiq key, its own webhook secret,
+# DATA_KEY and database. Deploy with `fly deploy --config fly.staging.toml`.
+# Sydney too, so staging behaves like the real thing.
+app = "cashstack-api-staging"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Runs once per deploy, before any new machine takes traffic.
+  release_command = "node src/migrate.ts"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  HOST = "0.0.0.0"
+  PORT = "8080"
+  BASIQ_MODE = "live"
+  PUBLIC_URL = "https://cashstack-api-staging.fly.dev"
+  APP_BUNDLE_ID = "com.bokscot.cashstack.staging"
+  APP_CALLBACK_SCHEME = "cashstack"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Nobody waits on staging: let it sleep, and wake on the first request.
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
