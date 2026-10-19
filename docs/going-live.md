@@ -9,8 +9,10 @@ business can hold. This is that list, in order.
 1. Sign up at [dashboard.basiq.io](https://dashboard.basiq.io) and create an
    application. Create an API key and keep it somewhere safe; it is shown once.
 2. In the dashboard's **Customise UI**:
-   - **Redirect URL**: `https://<your-api>/v1/consent/return`
-     (`https://cashstack-api.fly.dev/v1/consent/return` with the default `fly.toml`).
+   - **Redirect URL**: `https://<your-api>/v1/consent/return` — the sandbox
+     application points at staging
+     (`https://cashstack-api-staging.fly.dev/v1/consent/return`), the
+     production one at `https://cashstack-api.fly.dev/v1/consent/return`.
    - **Manage Consent URL**: `https://<your-api>/data-sharing` — the public page
      the server already serves, explaining how to stop sharing.
    - Set **Hooli OB (AU00000)** to `open-banking` to test the real CDR flow.
@@ -30,9 +32,9 @@ business can hold. This is that list, in order.
    cd server && BASIQ_MODE=live BASIQ_API_KEY=… BASIQ_WEBHOOK_SECRET=whsec_… DEV_LOGIN=1 npm run dev
    ```
 
-   Basiq can't redirect back to `127.0.0.1`, so for the full round trip use the
-   deployed API (step 3) or a tunnel, and point a Debug build at it with
-   `-apiBaseURL https://…`.
+   Basiq can't redirect back to `127.0.0.1`, so for the full round trip use
+   staging (step 3): the **CashStack Staging** scheme in Xcode builds an app
+   that talks to it, installed beside the real one.
 
 ## 2. Consumer Data Right — the agreement
 
@@ -93,6 +95,74 @@ fly secrets set ALERT_WEBHOOK_URL=https://hooks.slack.com/services/…
 It posts once per kind of app crash or server error per hour, with versions,
 iPhone models and error kinds, never anything about a person.
 
+### Staging
+
+A second Fly app on Basiq's **sandbox**, for the Staging build of the app —
+`com.bokscot.cashstack.staging`, called *CashStack Staging* on the home
+screen, so it sits beside the real one. It runs in production mode, with the
+same safety checks, its own secrets and its own database. It sleeps when
+nobody's using it.
+
+```bash
+cd server
+fly apps create cashstack-api-staging
+fly postgres create --name cashstack-db-staging --region syd
+fly postgres attach cashstack-db-staging -a cashstack-api-staging
+fly secrets set -a cashstack-api-staging \
+  BASIQ_API_KEY=…sandbox key… \
+  BASIQ_WEBHOOK_SECRET=whsec_…sandbox webhook… \
+  DATA_KEY=$(openssl rand -base64 32)
+fly deploy --config fly.staging.toml
+```
+
+In App Store Connect, add a second app with the bundle id
+`com.bokscot.cashstack.staging` (*CashStack Staging*), for TestFlight only —
+it never goes to review. Staging builds upload there, so a staging build
+can't be submitted as the real app by mistake. `server/test/deploy-config.test.ts`
+checks each `fly*.toml` against its Xcode configuration, so the two can't drift.
+
+### Backups
+
+Fly's unmanaged Postgres (`fly postgres create`) only keeps a few days of
+volume snapshots, and restoring one is a whole-volume job. So there's also a
+nightly `pg_dump`, encrypted on the way out with [age](https://age-encryption.org)
+to a key that never leaves you, and kept in an S3 bucket in Sydney
+(`ap-southeast-2`) — onshore, like everything else. The bucket's owner can't
+read the backups; only your age identity can. A failed backup alerts
+`ALERT_WEBHOOK_URL`. The job is `server/backup/`.
+
+1. Make the key pair on your own machine and keep the identity file somewhere
+   safe and offline (a password manager attachment, say). Losing it loses
+   every backup.
+
+   ```bash
+   brew install age
+   age-keygen -o cashstack-backup.key     # prints the public key: age1…
+   ```
+
+2. In AWS, create a bucket in `ap-southeast-2` with versioning on and a
+   lifecycle rule that expires objects after 35 days, and an IAM user that can
+   only `s3:PutObject` to it. (Any S3-compatible store in Australia works; set
+   `BACKUP_S3_ENDPOINT`.)
+
+3. Run the job as a scheduled Fly Machine in Sydney:
+
+   ```bash
+   cd server/backup
+   fly apps create cashstack-db-backup
+   fly secrets set -a cashstack-db-backup --stage \
+     DATABASE_URL=…the production database URL… \
+     BACKUP_AGE_RECIPIENT=age1… BACKUP_BUCKET=… \
+     AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… \
+     ALERT_WEBHOOK_URL=https://hooks.slack.com/services/…
+   fly deploy -a cashstack-db-backup --build-only --push --image-label latest
+   fly machine run registry.fly.io/cashstack-db-backup:latest \
+     -a cashstack-db-backup --region syd --schedule daily --restart no
+   ```
+
+4. Restore the first backup into a scratch database straight away (see
+   *Restore drill* below), so you know it works before you need it.
+
 ## 4. Apple
 
 1. **Sign in with Apple**: the entitlement is in `Config/CashStack.entitlements`.
@@ -142,8 +212,42 @@ iPhone models and error kinds, never anything about a person.
       (it shows up as build 0 in the crash report).
 - [ ] `APP_UPDATE_URL` set to the App Store listing (or TestFlight link), so an
       update screen has somewhere to send people.
+- [ ] Staging deployed and the sandbox round trip above done on a
+      CashStack Staging build from TestFlight.
+- [ ] A nightly backup in the bucket, and one restored into a scratch database.
 
 ## 6. Running it
+
+**Releasing.** One command tests, archives, uploads to TestFlight and tags
+the commit (`ios/staging/0.1-2610191630`):
+
+```bash
+scripts/release.sh staging       # CashStack Staging, against staging
+scripts/release.sh production    # CashStack, against production — from main only
+```
+
+It refuses uncommitted changes, and production from anywhere but `main`.
+`--dry-run` shows what it would do; `--no-upload` only archives. The build
+number is the UTC time (`yymmddHHMM`), so it always goes up — which is what
+`MIN_APP_BUILD` needs — and the archive lands in Xcode's Organizer with its
+dSYMs, for symbolicating crash reports later. It signs with the Apple account
+in Xcode, or an App Store Connect API key in `ASC_KEY_PATH`, `ASC_KEY_ID` and
+`ASC_ISSUER_ID`.
+
+**Restore drill, monthly.** Restore last night's backup into a scratch
+database and check the counts look right. It takes a few minutes and is the
+only way to know the backups work.
+
+```bash
+fly postgres create --name cashstack-db-drill --region syd   # then: fly proxy 15432:5432 -a cashstack-db-drill
+BACKUP_BUCKET=… BACKUP_AGE_IDENTITY=~/cashstack-backup.key AWS_PROFILE=… \
+  server/backup/restore.sh latest postgres://postgres:…@localhost:15432/postgres
+fly apps destroy cashstack-db-drill
+```
+
+It prints how many users, sessions and audit entries came back, and which
+migrations the backup had. The same command restores production for real,
+pointed at production's `DATABASE_URL` — which replaces what's there.
 
 **Stop a build.** If a build mishandles data or crashes on launch, turn it
 away; it shows **Time to update** with a button to `APP_UPDATE_URL`. Builds
