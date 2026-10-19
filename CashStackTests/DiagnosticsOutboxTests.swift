@@ -26,6 +26,7 @@ struct DiagnosticsOutboxTests {
         let server = StubServer { _ in (202, ["received": 1]) }
         let outbox = outbox(server)
         await outbox.keep(report(1))
+        try await Task.sleep(for: .milliseconds(3))   // so "oldest" means something
         await outbox.keep(report(2))
         await outbox.sendAll()
 
