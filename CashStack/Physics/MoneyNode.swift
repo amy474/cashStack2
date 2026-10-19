@@ -19,7 +19,7 @@ final class MoneyNode: SKSpriteNode {
         // SpriteKit surfaces a named node to the accessibility tree, so naming
         // each piece after its denomination lets the UI tests pick up a
         // particular note rather than guessing at coordinates.
-        name = "\(denomination.label) \(denomination.kind == .note ? "note" : "coin")"
+        name = "\(denomination.label) \(denomination.noun)"
 
         zPosition = CGFloat.random(in: 1...6)
 
@@ -34,6 +34,17 @@ final class MoneyNode: SKSpriteNode {
             body.linearDamping = 1.5
             body.angularDamping = 1.1
             body.friction = 0.75
+        case .bundle:
+            // A slab, not a sheet: heavy and slow to tumble, so loose notes
+            // bounce off it rather than knocking it about, but slippery
+            // enough that bundles slide flat instead of propping each other up.
+            body = SKPhysicsBody(rectangleOf: CGSize(width: denomination.size.width - 4,
+                                                     height: denomination.size.height - 4))
+            body.mass = denomination.size.width * denomination.size.height * (denomination.hundreds >= 100 ? 6e-6 : 3.5e-6)
+            body.restitution = 0.02
+            body.linearDamping = 1.6
+            body.angularDamping = 1.6
+            body.friction = 0.5
         case .coin:
             body = SKPhysicsBody(circleOfRadius: denomination.size.width / 2 - 1.5)
             let radius = denomination.size.width / 2

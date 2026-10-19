@@ -66,7 +66,8 @@ final class WalletStore: ObservableObject {
     init(sources: [BankDataSource] = DemoBanks.sources(), isLive: Bool = false) {
         self.sources = sources
         self.isLive = isLive
-        if isLive { selectedAccountID = UserDefaults.standard.string(forKey: Preference.selectedAccountID) }
+        // UI tests can start the demo on one account with `-account meridian-nest-egg`.
+        selectedAccountID = UserDefaults.standard.string(forKey: isLive ? Preference.selectedAccountID : "account")
     }
 
     // MARK: Derived
@@ -99,6 +100,7 @@ final class WalletStore: ObservableObject {
 
     var pieceCount: Int { pile.count }
 
+    var bundles: [MoneyStack] { stacks.filter { $0.denomination.kind == .bundle } }
     var notes: [MoneyStack] { stacks.filter { $0.denomination.kind == .note } }
     var coins: [MoneyStack] { stacks.filter { $0.denomination.kind == .coin } }
 
@@ -362,9 +364,15 @@ final class WalletStore: ObservableObject {
         CoinJar.allCases.filter { !spareChange.hiddenJars.contains($0) }
     }
 
-    /// Whether picking this piece up should bring the jars out at all.
+    /// Whether picking this piece up should bring the jars out at all. A
+    /// bundle never does: a thousand dollars is not spare change.
     func jarsTake(_ denomination: Denomination) -> Bool {
-        !visibleJars.isEmpty && (denomination.kind == .coin || spareChange.notesAllowed)
+        guard !visibleJars.isEmpty else { return false }
+        switch denomination.kind {
+        case .coin:   return true
+        case .note:   return spareChange.notesAllowed
+        case .bundle: return false
+        }
     }
 
     var savingsAccount: LinkedAccount? {
@@ -387,6 +395,7 @@ final class WalletStore: ObservableObject {
             return "You're paying from it"
         }
         guard let denomination else { return nil }
+        if denomination.kind == .bundle { return "Not spare change" }
         if denomination.kind == .note && !spareChange.notesAllowed { return "Coins only" }
         if let left = jarAllowanceLeftMinor, denomination.minor > left {
             return left < Money.smallestPiece ? "Daily limit reached"
@@ -453,6 +462,7 @@ final class WalletStore: ObservableObject {
 
     /// Why the tip jar will not take that piece, or nil if it will.
     func tipRefusal(for denomination: Denomination, alreadyTipped: Int) -> String? {
+        if denomination.kind == .bundle { return "Not a tip" }
         if denomination.kind == .note && !spareChange.notesAllowed { return "Coins only" }
         if let cap = spareChange.tipCapMinor, alreadyTipped + denomination.minor > cap {
             return alreadyTipped + Money.smallestPiece > cap ? "Tip limit reached"
