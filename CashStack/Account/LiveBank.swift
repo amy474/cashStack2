@@ -110,6 +110,7 @@ struct BankLink {
             for _ in 0..<3 where result.status == "pending" {
                 result = try await api.post("v1/consent/sessions/\(id)/wait")
             }
+            Log.bank.notice("Consent \(action, privacy: .public) finished: \(result.status, privacy: .public), \(result.accounts.count, privacy: .public) account(s)")
             switch result.status {
             case "ready":
                 return .connected(result.accounts.map(LinkedAccount.init))
@@ -122,6 +123,7 @@ struct BankLink {
                 return .failed([failure?.title, failure?.detail].compactMap { $0 }.joined(separator: ". "))
             }
         } catch {
+            Log.bank.error("Consent \(action, privacy: .public) failed: \(error.localizedDescription)")
             return .failed(error.localizedDescription)
         }
     }

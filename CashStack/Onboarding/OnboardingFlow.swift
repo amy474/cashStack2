@@ -126,7 +126,33 @@ private struct WelcomeStep: View {
                 .foregroundStyle(Theme.inkSoft)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+
+            Text(agreement)
+                .font(Theme.body(12))
+                .foregroundStyle(Theme.inkSoft)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("agreement")
         }
+    }
+
+    /// "By continuing you agree to the terms of use and privacy policy", with
+    /// both as links.
+    private var agreement: AttributedString {
+        var text = AttributedString("By continuing you agree to the ")
+        text += link("terms of use", AppConfig.termsURL)
+        text += AttributedString(" and ")
+        text += link("privacy policy", AppConfig.privacyPolicyURL)
+        text += AttributedString(".")
+        return text
+    }
+
+    private func link(_ title: String, _ url: URL) -> AttributedString {
+        var text = AttributedString(title)
+        text.link = url
+        text.underlineStyle = .single
+        text.foregroundColor = Theme.ink
+        return text
     }
 }
 
@@ -244,14 +270,10 @@ private struct ConnectStep: View {
                     Hairline()
                 }
 
-                Link(destination: AppConfig.dataSharingURL) {
-                    HStack(spacing: 5) {
-                        Text("How data sharing works")
-                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
-                    }
-                    .font(Theme.title(13))
-                    .foregroundStyle(Theme.ink)
-                    .underline()
+                VStack(alignment: .leading, spacing: 10) {
+                    OutLink(title: "How data sharing works", destination: AppConfig.dataSharingURL)
+                    OutLink(title: "CDR policy", destination: AppConfig.cdrPolicyURL)
+                        .accessibilityIdentifier("cdrPolicyLink")
                 }
                 .padding(.top, 14)
             }
@@ -423,7 +445,7 @@ struct OnboardingPage<Content: View, Actions: View>: View {
     }
 }
 
-private struct StepIcon: View {
+struct StepIcon: View {
     let systemName: String
     var body: some View {
         Image(systemName: systemName)

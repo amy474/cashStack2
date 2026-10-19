@@ -102,8 +102,10 @@ struct AccountsSheet: View {
                             .accessibilityIdentifier("leaveDemo")
                         }
                         .padding(.top, 24)
-                        .padding(.bottom, 30)
+                        .padding(.bottom, 12)
                     }
+
+                    helpAndLegal
                 }
             }
             .background(Theme.ground)
@@ -188,15 +190,7 @@ struct AccountsSheet: View {
             }
             GhostPillButton(title: "Manage data sharing", systemImage: "slider.horizontal.3") { runConsent("manage") }
                 .accessibilityIdentifier("manageDataSharing")
-            Link(destination: AppConfig.dataSharingURL) {
-                HStack(spacing: 5) {
-                    Text("How data sharing works")
-                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
-                }
-                .font(Theme.title(13))
-                .foregroundStyle(Theme.ink)
-                .underline()
-            }
+            OutLink(title: "How data sharing works", destination: AppConfig.dataSharingURL)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
@@ -257,6 +251,36 @@ struct AccountsSheet: View {
         .padding(.bottom, 20)
 
         Hairline()
+    }
+
+    // MARK: Help and legal
+
+    /// Where to get help and what CashStack has promised, with the version at
+    /// the foot for anyone writing to support.
+    @ViewBuilder private var helpAndLegal: some View {
+        SheetLabel(title: "Help and legal")
+        VStack(spacing: 0) {
+            LinkRow(title: "Help and support", systemImage: "questionmark.circle", destination: AppConfig.supportURL)
+                .accessibilityIdentifier("supportLink")
+            Hairline().opacity(0.12)
+            LinkRow(title: "Privacy policy", systemImage: "hand.raised", destination: AppConfig.privacyPolicyURL)
+                .accessibilityIdentifier("privacyLink")
+            Hairline().opacity(0.12)
+            LinkRow(title: "CDR policy", systemImage: "building.columns", destination: AppConfig.cdrPolicyURL)
+                .accessibilityIdentifier("cdrPolicyLink")
+            Hairline().opacity(0.12)
+            LinkRow(title: "Terms of use", systemImage: "doc.text", destination: AppConfig.termsURL)
+                .accessibilityIdentifier("termsLink")
+            Hairline().opacity(0.12)
+        }
+        Text("CashStack \(AppConfig.version)")
+            .font(Theme.body(11))
+            .foregroundStyle(Theme.inkSoft)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 30)
+            .accessibilityIdentifier("appVersion")
     }
 
     // MARK: Actions
@@ -387,6 +411,33 @@ private struct ConnectionRow: View {
             return "Needs reconnecting"
         default:
             return connection.status.capitalized
+        }
+    }
+}
+
+/// A full-width row that opens one of the server's public pages.
+private struct LinkRow: View {
+    let title: String
+    let systemImage: String
+    let destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 18)
+                Text(title)
+                    .font(Theme.title(15))
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.inkSoft)
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 15)
+            .contentShape(Rectangle())
         }
     }
 }

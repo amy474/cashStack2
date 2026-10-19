@@ -162,6 +162,24 @@ struct ModeSwitch: View {
     }
 }
 
+/// An underlined link out of the app, to one of the server's public pages.
+struct OutLink: View {
+    let title: String
+    let destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            HStack(spacing: 5) {
+                Text(title)
+                Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
+            }
+            .font(Theme.title(13))
+            .foregroundStyle(Theme.ink)
+            .underline()
+        }
+    }
+}
+
 enum WalletMode: String, CaseIterable, Identifiable {
     case loose
     case sorted

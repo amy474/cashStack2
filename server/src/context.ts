@@ -3,6 +3,7 @@ import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import type { BasiqClient } from './basiq/types.ts';
 import type { AppleTokens, AppleVerifier } from './auth/apple.ts';
+import type { AlertSink, Alerts } from './alerts.ts';
 import { authenticate, type Authenticated } from './auth/sessions.ts';
 
 declare module 'fastify' {
@@ -22,11 +23,14 @@ export type Deps = {
   now?: () => Date;
   /// Pause between job polls. Tests set it to zero.
   pollIntervalMs?: number;
+  /// Where alerts go. Defaults to ALERT_WEBHOOK_URL, or nowhere.
+  alertSink?: AlertSink;
 };
 
 export type Ctx = Required<Pick<Deps, 'now' | 'pollIntervalMs'>> & Deps & {
   audit(userId: string | null, event: string, detail?: Record<string, unknown>): Promise<void>;
   accountsCache: Map<string, { at: number; value: unknown }>;
+  alerts: Alerts;
 };
 
 export class HttpError extends Error {

@@ -20,6 +20,27 @@ enum AppConfig {
     /// The public page that explains how to stop sharing bank data.
     static var dataSharingURL: URL { apiBaseURL.appending(path: "data-sharing") }
 
+    /// The policies and help page the server publishes from server/pages.
+    /// The App Store listing links to the same addresses.
+    static var privacyPolicyURL: URL { apiBaseURL.appending(path: "privacy") }
+    static var cdrPolicyURL: URL { apiBaseURL.appending(path: "cdr-policy") }
+    static var termsURL: URL { apiBaseURL.appending(path: "terms") }
+    static var supportURL: URL { apiBaseURL.appending(path: "support") }
+
+    /// "0.1" — CFBundleShortVersionString.
+    static var marketingVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
+    /// CFBundleVersion as a number. Every request sends it, and the server
+    /// turns away builds below its MIN_APP_BUILD — so it must only go up.
+    static var build: Int {
+        Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
+    }
+
+    /// "0.1 (1)" — what support asks for, shown at the foot of Accounts.
+    static var version: String { "\(marketingVersion) (\(build))" }
+
     /// Development sign-in skips Apple. It only exists in Debug builds, and
     /// the server only honours it when started with DEV_LOGIN=1.
     static var offersDevelopmentSignIn: Bool {

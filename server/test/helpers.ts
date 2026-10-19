@@ -41,6 +41,8 @@ export type TestApp = {
   config: Config;
   apple: Awaited<ReturnType<typeof fakeApple>>;
   clock: { now: Date; advance(ms: number): void };
+  /// Every alert the server sent, in order.
+  alerts: string[];
   signIn(sub?: string): Promise<{ accessToken: string; refreshToken: string; userId: string }>;
   connectBank(accessToken: string, opts?: { fail?: boolean }): Promise<{ sessionId: string; redirect: string }>;
   close(): Promise<void>;
@@ -65,8 +67,9 @@ export async function testApp(env: Record<string, string> = {}): Promise<TestApp
       this.now = new Date(this.now.getTime() + ms);
     },
   };
+  const alerts: string[] = [];
   const app = await buildApp(
-    { config, db, basiq, verifyApple: appleVerifier(BUNDLE_ID, apple.keys), now: () => clock.now, pollIntervalMs: 0 },
+    { config, db, basiq, verifyApple: appleVerifier(BUNDLE_ID, apple.keys), now: () => clock.now, pollIntervalMs: 0, alertSink: (text) => { alerts.push(text); } },
     { logger: false },
   );
 
@@ -93,7 +96,7 @@ export async function testApp(env: Record<string, string> = {}): Promise<TestApp
     return { sessionId: start.json().id, redirect: ret.headers.location as string };
   }
 
-  return { app, db, basiq, config, apple, clock, signIn, connectBank, close: async () => { await app.close(); await db.close(); } };
+  return { app, db, basiq, config, apple, clock, alerts, signIn, connectBank, close: async () => { await app.close(); await db.close(); } };
 }
 
 export const bearer = (token: string) => ({ authorization: `Bearer ${token}` });

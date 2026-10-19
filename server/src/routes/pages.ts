@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { FakeBasiq } from '../basiq/fake.ts';
@@ -13,13 +14,90 @@ const page = (title: string, body: string) => `<!doctype html>
   h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; }
   h2 { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; margin: 32px 0 8px; }
   p, li { color: rgba(0,0,0,.72); }
-  ol { padding-left: 20px; }
+  ol, ul { padding-left: 20px; }
+  a { color: #000; }
+  mark { background: #ffe45c; color: #000; padding: 0 3px; border-radius: 3px; }
+  .draft { border: 1px solid #000; border-radius: 14px; padding: 10px 14px; font-size: 14px; color: #000; }
+  .links { font-size: 13px; line-height: 2; }
+  .links a { margin-right: 14px; white-space: nowrap; }
   .rule { border: 0; border-top: 1px solid #000; margin: 24px 0; }
   .button { display: block; text-align: center; padding: 15px; border-radius: 100px; text-decoration: none; margin-top: 12px; border: 1px solid #000; }
   .primary { background: #000; color: #fff; }
   .ghost { color: #000; }
   .tag { display: inline-block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid #000; border-radius: 100px; padding: 2px 10px; }
 </style></head><body><main>${body}</main></body></html>`;
+
+/// At the foot of every public page, so each one leads to the others.
+const LINKS = `<hr class="rule"><p class="links"><a href="/support">Help</a><a href="/privacy">Privacy</a><a href="/cdr-policy">CDR policy</a><a href="/terms">Terms</a><a href="/data-sharing">Data sharing</a></p>`;
+
+// MARK: Policies and help
+
+/// The privacy policy, CDR policy, terms and help page are HTML in
+/// server/pages, so they can be read, edited and reviewed without touching
+/// code. The App Store listing, Basiq's consent screens and the app all link
+/// to them here.
+export const PUBLIC_PAGES = [
+  { path: '/privacy', file: 'privacy.html', title: 'Privacy policy' },
+  { path: '/cdr-policy', file: 'cdr-policy.html', title: 'CDR policy' },
+  { path: '/terms', file: 'terms.html', title: 'Terms of use' },
+  { path: '/support', file: 'support.html', title: 'Help and support' },
+] as const;
+
+const PAGES_DIR = new URL('../../pages/', import.meta.url);
+
+/// Who CashStack is, written once in pages/details.json and filled in
+/// wherever a page says {{business}}, {{email}} and so on.
+const Details = z.object({
+  business: z.string(),
+  abn: z.string(),
+  email: z.string(),
+  address: z.string(),
+  state: z.string(),
+});
+export type Details = z.infer<typeof Details>;
+
+const DETAIL_LABELS: Record<keyof Details, string> = {
+  business: 'business name',
+  abn: 'ABN',
+  email: 'support email',
+  address: 'postal address',
+  state: 'state or territory',
+};
+
+const escapeHtml = (text: string) =>
+  text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+/// One page from server/pages: comments dropped, details filled in. A detail
+/// still blank in details.json, or anything left in [[double brackets]], is a
+/// gap — highlighted where it sits, with a draft notice at the top, so an
+/// unfinished policy can't pass for a finished one.
+export function renderPublicPage(source: string, details: Details): { body: string; gaps: string[] } {
+  const gaps: string[] = [];
+  const gap = (text: string) => {
+    gaps.push(text);
+    return `<mark>${text}</mark>`;
+  };
+  const body = source
+    .replace(/<!--[\s\S]*?-->\s*/g, '')
+    .replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+      if (!(key in DETAIL_LABELS)) throw new Error(`pages: unknown detail {{${key}}}`);
+      const value = details[key as keyof Details].trim();
+      if (!value) return gap(DETAIL_LABELS[key as keyof Details]);
+      const safe = escapeHtml(value);
+      return key === 'email' ? `<a href="mailto:${safe}">${safe}</a>` : safe;
+    })
+    .replace(/\[\[([\s\S]+?)\]\]/g, (_, text: string) => gap(text));
+  const draft = gaps.length ? '<p class="draft"><b>Draft.</b> The highlighted parts are still being confirmed.</p>\n' : '';
+  return { body: draft + body.trim() + '\n' + LINKS, gaps };
+}
+
+function loadPublicPages() {
+  const details = Details.parse(JSON.parse(readFileSync(new URL('details.json', PAGES_DIR), 'utf8')));
+  return PUBLIC_PAGES.map(({ path, file, title }) => {
+    const { body, gaps } = renderPublicPage(readFileSync(new URL(file, PAGES_DIR), 'utf8'), details);
+    return { path, gaps, html: page(`${title} · CashStack`, body) };
+  });
+}
 
 /// The public page Basiq's consent screen links to as the "Manage Consent
 /// URL", and that the app links to from its data-sharing settings.
@@ -37,7 +115,8 @@ const dataSharing = page(
 <h2>Delete everything</h2>
 <p>In CashStack, open accounts and tap <b>Delete my account and data</b>. This deletes your CashStack account, your bank connections, and the data Basiq holds for CashStack.</p>
 <h2>When sharing stops</h2>
-<p>CashStack does not store your balances or transactions; it reads them when you open the app. When sharing stops, the wallet simply has nothing to show for that bank.</p>`,
+<p>CashStack does not store your balances or transactions; it reads them when you open the app. When sharing stops, the wallet simply has nothing to show for that bank.</p>
+${LINKS}`,
 );
 
 const FakeConsentQuery = z.object({
@@ -50,6 +129,15 @@ export function pageRoutes(app: FastifyInstance, ctx: Ctx, fake?: FakeBasiq) {
   app.get('/healthz', async () => ({ ok: true }));
 
   app.get('/data-sharing', async (_req, reply) => reply.type('text/html; charset=utf-8').send(dataSharing));
+
+  const publicPages = loadPublicPages();
+  for (const { path, html } of publicPages) {
+    app.get(path, async (_req, reply) => reply.type('text/html; charset=utf-8').send(html));
+  }
+  const drafts = publicPages.filter((p) => p.gaps.length);
+  if (drafts.length) {
+    app.log.warn({ pages: drafts.map((p) => `${p.path} (${p.gaps.length})`) }, 'public pages still have gaps to fill: see server/pages');
+  }
 
   if (!fake) return;
 

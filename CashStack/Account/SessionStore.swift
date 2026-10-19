@@ -80,6 +80,7 @@ final class SessionStore: ObservableObject {
         switch result {
         case .failure(let error):
             if (error as? ASAuthorizationError)?.code != .canceled {
+                Log.session.error("Sign in with Apple failed: \((error as NSError).code, privacy: .public)")
                 errorMessage = "Sign in with Apple didn't go through. Try again."
             }
         case .success(let authorization):
@@ -98,7 +99,9 @@ final class SessionStore: ObservableObject {
                     device: UIDevice.current.model)
                 pendingNonce = nil
                 state = .signedIn
+                Log.session.notice("Signed in")
             } catch {
+                Log.session.error("Server refused the Apple sign-in: \(error.localizedDescription, privacy: .public)")
                 errorMessage = error.localizedDescription
             }
         }
@@ -177,6 +180,7 @@ final class SessionStore: ObservableObject {
     }
 
     private func endSession(message: String?) {
+        Log.session.notice("Session ended\(message == nil ? "" : " by the server", privacy: .public)")
         Keychain.delete()
         Preference.clearAccount()
         lockEnabled = false

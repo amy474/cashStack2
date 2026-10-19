@@ -91,6 +91,10 @@ enum APIError: LocalizedError, Equatable {
     /// The app is locked; nothing can be fetched until Face ID.
     case locked
     case offline
+    /// The server turns this build away until it's updated.
+    case updateRequired(message: String)
+    /// The server is switched off for maintenance.
+    case maintenance(message: String)
     case server(code: String, message: String)
 
     var errorDescription: String? {
@@ -98,7 +102,7 @@ enum APIError: LocalizedError, Equatable {
         case .signedOut: "You've been signed out. Sign in again to continue."
         case .locked: "Unlock CashStack to continue."
         case .offline: "You're offline. Your balance will update when you're back."
-        case .server(_, let message): message
+        case .updateRequired(let message), .maintenance(let message), .server(_, let message): message
         }
     }
 }
@@ -122,6 +126,8 @@ actor APIClient {
     private var onRotate: (@Sendable (String) -> Void)?
     /// The server said the session is over.
     private var onSignedOut: (@Sendable () -> Void)?
+    /// The server turned a request away: update, or maintenance.
+    private var onNotice: (@Sendable (ServiceNotice) -> Void)?
 
     private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -142,13 +148,27 @@ actor APIClient {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 40
         config.waitsForConnectivity = false
-        config.httpAdditionalHeaders = ["Accept": "application/json"]
+        config.httpAdditionalHeaders = [
+            "Accept": "application/json",
+            // So the server can turn away builds that are too old.
+            "X-CashStack-Build": String(AppConfig.build),
+            "X-CashStack-Version": AppConfig.marketingVersion,
+        ]
         self.session = URLSession(configuration: config)
     }
 
     func configure(onRotate: @escaping @Sendable (String) -> Void, onSignedOut: @escaping @Sendable () -> Void) {
         self.onRotate = onRotate
         self.onSignedOut = onSignedOut
+    }
+
+    func observe(onNotice: @escaping @Sendable (ServiceNotice) -> Void) {
+        self.onNotice = onNotice
+    }
+
+    /// Whether the server will talk to this build, and whether it's up.
+    func status() async throws -> ServiceStatusResponse {
+        try await send("GET", "v1/status", body: Optional<String>.none, authorized: false)
     }
 
     // MARK: Session
@@ -212,6 +232,7 @@ actor APIClient {
                 let pair: TokenPair = try await send("POST", "v1/auth/refresh", body: Body(refreshToken: token), authorized: false)
                 adopt(access: pair.accessToken, refresh: pair.refreshToken, expiresIn: pair.expiresIn)
             } catch APIError.server(let code, _) where code == "session_expired" {
+                Log.session.notice("Refresh token expired or reused; signing out")
                 forget()
                 onSignedOut?()
                 throw APIError.signedOut
@@ -248,7 +269,7 @@ actor APIClient {
     }
 
     private struct Empty: Decodable {}
-    private struct ErrorBody: Decodable { let error: String; let message: String }
+    private struct ErrorBody: Decodable { let error: String; let message: String; let updateUrl: URL? }
 
     private func send<T: Decodable>(_ method: String, _ path: String) async throws -> T {
         try await send(method, path, body: Optional<String>.none)
@@ -270,6 +291,7 @@ actor APIClient {
             do {
                 (data, response) = try await session.data(for: request)
             } catch let error as URLError where [.notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost, .timedOut, .cannotFindHost].contains(error.code) {
+                Log.api.notice("Offline: \(method, privacy: .public) \(path) (\(error.code.rawValue, privacy: .public))")
                 throw APIError.offline
             }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -281,6 +303,16 @@ actor APIClient {
             }
             guard (200..<300).contains(status) else {
                 let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+                Log.api.error("\(method, privacy: .public) \(path) answered \(status, privacy: .public) \(body?.error ?? "", privacy: .public)")
+                if status == 426, body?.error == "upgrade_required" {
+                    let message = body?.message ?? ServiceNotice.updateMessage
+                    onNotice?(.updateRequired(message: message, updateURL: body?.updateUrl))
+                    throw APIError.updateRequired(message: message)
+                }
+                if status == 503, body?.error == "maintenance", let message = body?.message {
+                    onNotice?(.maintenance(message: message))
+                    throw APIError.maintenance(message: message)
+                }
                 if status == 401 && authorized {
                     forget()
                     onSignedOut?()
