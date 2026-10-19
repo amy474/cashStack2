@@ -37,6 +37,20 @@ const Env = z.object({
   APPLE_KEY_ID: z.string().optional(),
   APPLE_PRIVATE_KEY: z.string().optional(),
 
+  /// Builds of the app older than this CFBundleVersion are told to update
+  /// before they can do anything. 0 lets every build in.
+  MIN_APP_BUILD: z.coerce.number().int().min(0).default(0),
+  /// Where the app's Update button goes: the App Store listing
+  /// (itms-apps://apps.apple.com/app/id…), or TestFlight during the beta.
+  APP_UPDATE_URL: z.url().optional(),
+  /// A sentence to show in the app while it's switched off for maintenance.
+  /// Unset, the app works as normal.
+  MAINTENANCE_MESSAGE: z.string().trim().max(300).optional(),
+  /// Optional: a Slack-style incoming webhook that hears about app crashes and
+  /// server errors. Alerts carry versions, devices and error kinds, never
+  /// anything about a person.
+  ALERT_WEBHOOK_URL: z.url().optional(),
+
   /// Development only: sign in without Apple.
   DEV_LOGIN: bool,
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -60,6 +74,12 @@ export type Config = {
   };
   dataKey: Buffer;
   apple?: { teamId: string; keyId: string; privateKey: string };
+  app: {
+    minBuild: number;
+    updateUrl?: string;
+    maintenance?: string;
+  };
+  alertWebhookUrl?: string;
   devLogin: boolean;
   logLevel: string;
 };
@@ -81,6 +101,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     if (!e.PUBLIC_URL.startsWith('https://')) problems.push('PUBLIC_URL must be https in production');
     if (!e.BASIQ_WEBHOOK_SECRET) problems.push('BASIQ_WEBHOOK_SECRET is required in production');
     if (!e.DATA_KEY) problems.push('DATA_KEY is required in production');
+    if (e.ALERT_WEBHOOK_URL && !e.ALERT_WEBHOOK_URL.startsWith('https://')) problems.push('ALERT_WEBHOOK_URL must be https in production');
   }
   if (mode === 'live' && !e.BASIQ_API_KEY) problems.push('BASIQ_API_KEY is required when BASIQ_MODE=live');
 
@@ -120,6 +141,12 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     apple: e.APPLE_TEAM_ID && e.APPLE_KEY_ID && e.APPLE_PRIVATE_KEY
       ? { teamId: e.APPLE_TEAM_ID, keyId: e.APPLE_KEY_ID, privateKey: e.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n') }
       : undefined,
+    app: {
+      minBuild: e.MIN_APP_BUILD,
+      updateUrl: e.APP_UPDATE_URL,
+      maintenance: e.MAINTENANCE_MESSAGE || undefined,
+    },
+    alertWebhookUrl: e.ALERT_WEBHOOK_URL,
     devLogin: e.DEV_LOGIN,
     logLevel: e.LOG_LEVEL,
   };

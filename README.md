@@ -224,12 +224,33 @@ CDR policy before consent, and to all four from Accounts › Help and legal, wit
 the version underneath for support. `CashStack/PrivacyInfo.xcprivacy` is the
 App Store's copy of the same story.
 
+**Old builds can be stopped, and the app switched off.** Every request carries
+the build number. The server turns away builds below `MIN_APP_BUILD` with 426
+and everything with 503 while `MAINTENANCE_MESSAGE` is set; the app also asks
+`GET /v1/status` at launch and on coming back to the front, so it knows before
+anyone signs in. Either way it replaces everything with **Time to update** (with
+a button to `APP_UPDATE_URL`) or **Back soon** (with the message, a retry, and
+the demo, which keeps working). `fly secrets set` flips either switch; no app
+release needed.
+
+**Crashes come home.** `CrashReporter` subscribes to MetricKit, keeps each
+crash, hang or resource report in Caches, and posts it to `/v1/diagnostics`
+until the server has it. Reports go without a token and are stored without a
+user or IP address, kept 90 days, and a crash alerts `ALERT_WEBHOOK_URL`, as
+does any unhandled server error. `npm run diagnostics` lists what's been
+crashing by build. The app also logs to the unified log through `Log`, with
+anything personal left private. How to use all of this once live is in
+[docs/going-live.md](docs/going-live.md#6-running-it).
+
 ```
 server/
   src/app.ts             Fastify app: rate limits, security headers, error shapes
   src/auth/              Sign in with Apple, rotating sessions
   src/basiq/             The real Basiq client, a fake for dev and tests, webhook signatures
-  src/routes/            auth, me, consent, accounts, connections, webhooks, public pages
+  src/routes/            auth, me, consent, accounts, connections, webhooks, public pages,
+                         status (old builds, maintenance), diagnostics (crash reports)
+  src/alerts.ts          Slack-style alerts, once per kind of problem per hour
+  src/diagnostics-report.ts  `npm run diagnostics`: what's been crashing
   pages/                 Privacy policy, CDR policy, terms, help; details.json
   migrations/            Postgres schema
   test/                  node --test, on an embedded Postgres
@@ -237,6 +258,7 @@ server/
 CashStack/
   Account/               API client, Keychain, session, live bank source, consent flow
   Onboarding/            Welcome, Face ID, connect a bank, pick the account, lock screen
+  Diagnostics/           MetricKit crash reports to the server, unified-log categories
 ```
 
 What it takes to put real customers on it (Basiq, the CDR representative
@@ -247,7 +269,8 @@ agreement, Apple keys, Fly) is in [docs/going-live.md](docs/going-live.md).
 The server's tests run against an embedded Postgres and a fake Basiq. They
 cover Apple token verification, session rotation and reuse, the consent round
 trip, account filtering and masking, webhook signatures, account deletion, and
-the public pages filling in their details and linking only to each other:
+the public pages filling in their details and linking only to each other, the
+build gate and maintenance switch, crash reports and alerts:
 
 ```bash
 cd server && npm test && npm run typecheck
@@ -284,6 +307,10 @@ till to a café, so there is always a tip jar to test against.
 `HelpAndLegalUITests` checks Accounts links to help and every policy, with the
 version shown, and that the welcome screen names the terms and privacy policy.
 
+`ServiceNoticeUITests` launches with `-serviceNotice update` or
+`-serviceNotice maintenance` (Debug only) to check an old build is stopped even
+in the demo, and that maintenance explains itself but leaves the demo running.
+
 `ScreenshotTests` walks the app through every screen and attaches a shot of each.
 
 > If a test fails in a way that makes no sense, delete the app off the simulator
@@ -297,6 +324,8 @@ The project archives for device as-is; it only needs signing details.
 1. In **Signing & Capabilities**, pick your team. The bundle id is
    `com.bokscot.cashstack` — change it to one your team owns.
 2. Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the build settings.
+   `CURRENT_PROJECT_VERSION` must go up with every upload: it's the build
+   number the server's `MIN_APP_BUILD` compares against.
 3. **Product ▸ Archive**, then **Distribute App ▸ TestFlight**.
 
 Already in place: portrait-only, light appearance, iOS 17 minimum, a 1024px app

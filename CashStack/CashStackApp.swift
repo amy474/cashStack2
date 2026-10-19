@@ -7,6 +7,7 @@ struct CashStackApp: App {
     init() {
         Fonts.register()
         Self.applyChrome()
+        CrashReporter.shared.start()
     }
 
     var body: some Scene {
@@ -41,13 +42,20 @@ struct CashStackApp: App {
 /// unlocked and onboarded — the person's real ones.
 struct AppRoot: View {
     @StateObject private var session = SessionStore()
+    @StateObject private var status = ServiceStatus()
     @AppStorage(Preference.demo) private var demo = false
     @AppStorage(Preference.onboarded) private var onboarded = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
-            if demo {
+            // In place of everything else, not over it: nothing behind it can
+            // be tapped or reached with VoiceOver, and the pile stops running.
+            if let notice = blockingNotice {
+                ServiceNoticeView(notice: notice,
+                                  onRetry: { await status.check(session.api) },
+                                  onDemo: { demo = true })
+            } else if demo {
                 DemoWallet()
             } else {
                 switch session.state {
@@ -68,7 +76,24 @@ struct AppRoot: View {
             }
         }
         .environmentObject(session)
-        .onChange(of: scenePhase) { _, phase in session.scenePhaseChanged(phase) }
+        .task {
+            let status = status
+            await session.api.observe { notice in
+                Task { @MainActor in status.heard(notice) }
+            }
+            await status.check(session.api)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            session.scenePhaseChanged(phase)
+            if phase == .active { Task { await status.check(session.api) } }
+        }
+    }
+
+    /// An old build is stopped everywhere, the demo included; maintenance
+    /// only stops what needs the server, so the demo carries on through it.
+    private var blockingNotice: ServiceNotice? {
+        guard let notice = status.notice, !(demo && notice.isMaintenance) else { return nil }
+        return notice
     }
 }
 

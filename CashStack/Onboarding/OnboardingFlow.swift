@@ -445,7 +445,7 @@ struct OnboardingPage<Content: View, Actions: View>: View {
     }
 }
 
-private struct StepIcon: View {
+struct StepIcon: View {
     let systemName: String
     var body: some View {
         Image(systemName: systemName)

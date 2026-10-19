@@ -83,6 +83,16 @@ The server refuses to start in production without `DATABASE_URL`,
 or with `DEV_LOGIN` set. If you pick another app name, change `PUBLIC_URL` in
 `fly.toml` and `CASHSTACK_API_URL` (Release) in the Xcode project to match.
 
+So someone hears when things break, point the server at a Slack incoming
+webhook (Slack › Apps › Incoming Webhooks):
+
+```bash
+fly secrets set ALERT_WEBHOOK_URL=https://hooks.slack.com/services/…
+```
+
+It posts once per kind of app crash or server error per hour, with versions,
+iPhone models and error kinds, never anything about a person.
+
 ## 4. Apple
 
 1. **Sign in with Apple**: the entitlement is in `Config/CashStack.entitlements`.
@@ -103,7 +113,9 @@ or with `DEV_LOGIN` set. If you pick another app name, change `PUBLIC_URL` in
    Communication**, or those emails won't arrive. Ask Basiq which domain.
 4. **App Privacy**: declare *Financial Info* (account balances), *Contact
    Info → Email Address* and *Identifiers → User ID*, each linked to the user
-   and used for app functionality. No tracking. These answers have to match
+   and used for app functionality; and *Diagnostics → Crash Data* and
+   *Performance Data*, **not** linked to the user (crash reports go without a
+   token and are stored without a user or IP). No tracking. These answers have to match
    `CashStack/PrivacyInfo.xcprivacy`, which the upload is checked against; if
    the app starts collecting something new, change both.
 5. **App Store listing**: Privacy Policy URL
@@ -124,6 +136,58 @@ or with `DEV_LOGIN` set. If you pick another app name, change `PUBLIC_URL` in
       `/cdr-policy`, `/terms` or `/support`, and no
       `public pages still have gaps to fill` line in `fly logs`.
 - [ ] Privacy Policy and Support URLs set in App Store Connect.
+- [ ] `ALERT_WEBHOOK_URL` set, and a test alert arrived:
+      `curl -X POST https://cashstack-api.fly.dev/v1/diagnostics -H 'content-type: application/json'
+      -d '{"crashDiagnostics":[{"diagnosticMetaData":{"appBuildVersion":"0","signal":6}}]}'`
+      (it shows up as build 0 in the crash report).
+- [ ] `APP_UPDATE_URL` set to the App Store listing (or TestFlight link), so an
+      update screen has somewhere to send people.
+
+## 6. Running it
+
+**Stop a build.** If a build mishandles data or crashes on launch, turn it
+away; it shows **Time to update** with a button to `APP_UPDATE_URL`. Builds
+are compared by `CURRENT_PROJECT_VERSION`, which is why it has to go up with
+every upload.
+
+```bash
+fly secrets set MIN_APP_BUILD=15 APP_UPDATE_URL=itms-apps://apps.apple.com/app/id…
+```
+
+**Maintenance.** While the database or Basiq is being worked on, switch the
+app off with a sentence people will read. The demo keeps working; the app
+checks again every minute and comes back by itself when the message is unset.
+
+```bash
+fly secrets set MAINTENANCE_MESSAGE="We're upgrading CashStack. Back by 9pm."
+fly secrets unset MAINTENANCE_MESSAGE
+```
+
+Both take effect as Fly restarts the machines, in a few seconds. Status,
+crash reports, Basiq's webhooks and the public pages stay open throughout.
+
+**Crashes.** MetricKit reports crashes, hangs, slow launches and CPU or disk
+overuse, and the app forwards them to `/v1/diagnostics`; crashes also alert.
+They're kept for 90 days.
+
+```bash
+fly ssh console -C "node src/diagnostics-report.ts"       # last 7 days, by build and kind
+fly ssh console -C "node src/diagnostics-report.ts 30"    # last 30
+fly ssh console -C "node src/diagnostics-report.ts --id 42"
+```
+
+The full report has call stacks as addresses. Keep each upload's archive
+(Xcode › Organizer › Archives) and symbolicate a frame against its dSYM:
+`atos -arch arm64e -o CashStack.app.dSYM/Contents/Resources/DWARF/CashStack
+-l <address − offsetIntoBinaryTextSegment> <address>`.
+
+**Server errors** alert with the route and error kind; the details, with the
+request id from the alert, are in `fly logs`.
+
+**On a phone.** The app writes to the unified log under the subsystem
+`com.bokscot.cashstack` (categories `api`, `session`, `bank`, `diagnostics`).
+Connect the phone to a Mac and filter by it in Console.app, or ask someone to
+send a sysdiagnose. Names, balances and tokens are redacted.
 
 ## What this release does not do
 

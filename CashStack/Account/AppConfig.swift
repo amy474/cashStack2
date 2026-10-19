@@ -27,13 +27,19 @@ enum AppConfig {
     static var termsURL: URL { apiBaseURL.appending(path: "terms") }
     static var supportURL: URL { apiBaseURL.appending(path: "support") }
 
-    /// "0.1 (1)" — what support asks for, shown at the foot of Accounts.
-    static var version: String {
-        let info = Bundle.main.infoDictionary
-        let marketing = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(marketing) (\(build))"
+    /// "0.1" — CFBundleShortVersionString.
+    static var marketingVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
     }
+
+    /// CFBundleVersion as a number. Every request sends it, and the server
+    /// turns away builds below its MIN_APP_BUILD — so it must only go up.
+    static var build: Int {
+        Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0
+    }
+
+    /// "0.1 (1)" — what support asks for, shown at the foot of Accounts.
+    static var version: String { "\(marketingVersion) (\(build))" }
 
     /// Development sign-in skips Apple. It only exists in Debug builds, and
     /// the server only honours it when started with DEV_LOGIN=1.
