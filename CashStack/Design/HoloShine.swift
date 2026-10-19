@@ -2,7 +2,8 @@ import SpriteKit
 
 /// The holographic sheen. A rainbow band sweeps diagonally across each piece of
 /// money on a slow loop, and a second softer sheen tracks how the phone is
-/// tilted — so the foil catches the light as the handset moves.
+/// tilted — so the foil catches the light as the handset moves. With Reduce
+/// Motion on, the sweep stops and the foil holds still.
 enum HoloShine {
 
     // SpriteKit transpiles this to Metal, rewriting `gl_FragColor = x` into a
@@ -14,16 +15,17 @@ enum HoloShine {
         // Diagonal coordinate across the face of the money.
         float p = v_tex_coord.x * 1.35 + (1.0 - v_tex_coord.y) * 0.75;
 
-        // Slow automatic sweep. u_seed staggers the pieces so they do not flash together.
+        // Slow automatic sweep. u_seed staggers the pieces so they do not flash
+        // together; u_motion is 0 under Reduce Motion, which stops it.
         float cycle = fract(u_time * 0.14 + u_seed);
         float band  = smoothstep(0.0, 0.26, 0.26 - abs(p - (cycle * 2.9 - 0.75)));
-        band = band * band;
+        band = band * band * u_motion;
 
         // Tilt-reactive sheen.
         float sheen = smoothstep(0.0, 0.62, 0.62 - abs(p - (u_tilt * 0.8 + 0.9)));
 
         // Rainbow ramp.
-        float h = fract(p * 0.55 + u_tilt * 0.2 + u_time * 0.04 + u_seed);
+        float h = fract(p * 0.55 + u_tilt * 0.2 + u_time * 0.04 * u_motion + u_seed);
         vec3 rainbow = 0.5 + 0.5 * cos(6.2831853 * (h + vec3(0.00, 0.33, 0.67)));
 
         float gain = band * 0.85 + sheen * 0.22;
@@ -42,13 +44,22 @@ enum HoloShine {
         let shader = SKShader(source: source)
         shader.uniforms = [
             SKUniform(name: "u_seed", float: Float(index) * 0.25),
-            SKUniform(name: "u_tilt", float: 0)
+            SKUniform(name: "u_tilt", float: 0),
+            SKUniform(name: "u_motion", float: 1)
         ]
         return shader
     }
 
     static func shader(variant index: Int) -> SKShader {
         variants[abs(index) % variants.count]
+    }
+
+    /// Off under Reduce Motion: no sweep, and the sheen stops following tilt.
+    static func setMotion(_ on: Bool) {
+        for shader in variants {
+            shader.uniformNamed("u_motion")?.floatValue = on ? 1 : 0
+        }
+        if !on { updateTilt(0) }
     }
 
     /// Feed the device roll in, roughly -1...1.

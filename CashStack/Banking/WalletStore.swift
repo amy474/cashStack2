@@ -37,7 +37,20 @@ final class WalletStore: ObservableObject {
 
     /// Where spare change goes and how much of it may. Edited in place by the
     /// settings sheet.
-    @Published var spareChange = SpareChangeSettings()
+    @Published var spareChange = SpareChangeSettings() {
+        didSet {
+            guard isLive, spareChange != oldValue else { return }
+            defaults.set(spareChange.stored, forKey: Preference.jarSettings)
+        }
+    }
+    /// The one-off "your coins can do more" hint has been seen, or a coin
+    /// has gone in a jar, so it needn't show again.
+    @Published var coachMarkSeen = false {
+        didSet {
+            guard isLive, coachMarkSeen, !oldValue else { return }
+            defaults.set(true, forKey: Preference.jarCoachSeen)
+        }
+    }
     /// Every piece that has gone in a jar, newest first. Undoing one removes it.
     @Published private(set) var drops: [JarDrop] = []
     /// The drop the undo toast is offering to take back.
@@ -59,15 +72,26 @@ final class WalletStore: ObservableObject {
     /// "couldn't reach them", not "nothing connected".
     @Published private(set) var loadFailed = false
 
-    /// Real banks, read-only: paying and the jars are practice, and the
-    /// chosen account is remembered between launches.
+    /// Real banks, read-only: paying and the jars are practice. The chosen
+    /// account, the jar settings and the seen hint are remembered between
+    /// launches. The demo remembers nothing and starts fresh every time.
+    ///
+    /// What went in the jars, like what was paid at the till, is not kept:
+    /// it was practice on a balance that's read afresh at the next launch, so
+    /// taking it back then would hand back money the balance already has.
     let isLive: Bool
+    private let defaults: UserDefaults
 
-    init(sources: [BankDataSource] = DemoBanks.sources(), isLive: Bool = false) {
+    init(sources: [BankDataSource] = DemoBanks.sources(), isLive: Bool = false, defaults: UserDefaults = .standard) {
         self.sources = sources
         self.isLive = isLive
+        self.defaults = defaults
         // UI tests can start the demo on one account with `-account meridian-nest-egg`.
-        selectedAccountID = UserDefaults.standard.string(forKey: isLive ? Preference.selectedAccountID : "account")
+        selectedAccountID = defaults.string(forKey: isLive ? Preference.selectedAccountID : "account")
+        if isLive {
+            spareChange = defaults.data(forKey: Preference.jarSettings).flatMap(SpareChangeSettings.init(stored:)) ?? SpareChangeSettings()
+            coachMarkSeen = defaults.bool(forKey: Preference.jarCoachSeen)
+        }
     }
 
     // MARK: Derived
@@ -220,7 +244,7 @@ final class WalletStore: ObservableObject {
 
     private func rememberSelection() {
         guard isLive else { return }
-        UserDefaults.standard.set(selectedAccountID, forKey: Preference.selectedAccountID)
+        defaults.set(selectedAccountID, forKey: Preference.selectedAccountID)
     }
 
     /// Link another institution at runtime — the hook a real "add your bank"

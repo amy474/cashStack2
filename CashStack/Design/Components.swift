@@ -12,6 +12,7 @@ struct MoneyThumb: View {
     var shimmerDelay: Double = 0
 
     @State private var phase: CGFloat = -1.1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var artwork: some View {
         Image(uiImage: MoneyArt.image(for: denomination))
@@ -42,12 +43,21 @@ struct MoneyThumb: View {
             }
             .compositingGroup()
             .mask(artwork)
-            .onAppear {
-                guard phase < 0 else { return }
-                withAnimation(.linear(duration: 2.8).delay(shimmerDelay).repeatForever(autoreverses: false)) {
-                    phase = 1.1
-                }
+            .onAppear(perform: shimmer)
+            .onChange(of: reduceMotion) { _, _ in shimmer() }
+    }
+
+    /// Start the sweep, or under Reduce Motion park the band off the money.
+    private func shimmer() {
+        if reduceMotion {
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) { phase = -1.1 }
+        } else if phase < 0 {
+            withAnimation(.linear(duration: 2.8).delay(shimmerDelay).repeatForever(autoreverses: false)) {
+                phase = 1.1
             }
+        }
     }
 }
 

@@ -136,6 +136,57 @@ struct SpareChangeSettings: Equatable {
     static let tipCapChoices: [Int?] = [200, 500, 1_000, nil]
 }
 
+// MARK: - Remembering
+
+extension SpareChangeSettings {
+
+    /// What's written down between launches: ids rather than catalogue
+    /// entries, and every field optional, so a fund or charity that has gone,
+    /// or a setting added later, comes back as its default rather than failing.
+    private struct Stored: Codable {
+        var investment: String?
+        var charity: String?
+        var savingsAccountID: String?
+        var hiddenJars: [String]?
+        var notesAllowed: Bool?
+        var dailyLimitMinor: Int?
+        var noDailyLimit: Bool?
+        var tipWhilePaying: Bool?
+        var tipFromChange: Bool?
+        var tipCapMinor: Int?
+        var noTipCap: Bool?
+    }
+
+    init?(stored data: Data) {
+        guard let stored = try? JSONDecoder().decode(Stored.self, from: data) else { return nil }
+        let defaults = SpareChangeSettings()
+        investment = stored.investment.flatMap { id in Investment.catalogue.first { $0.ticker == id } }
+        charity = stored.charity.flatMap { id in Charity.catalogue.first { $0.id == id } }
+        savingsAccountID = stored.savingsAccountID
+        hiddenJars = Set((stored.hiddenJars ?? []).compactMap(CoinJar.init(rawValue:)))
+        notesAllowed = stored.notesAllowed ?? defaults.notesAllowed
+        dailyLimitMinor = stored.noDailyLimit == true ? nil : (stored.dailyLimitMinor ?? defaults.dailyLimitMinor)
+        tipWhilePaying = stored.tipWhilePaying ?? defaults.tipWhilePaying
+        tipFromChange = stored.tipFromChange ?? defaults.tipFromChange
+        tipCapMinor = stored.noTipCap == true ? nil : (stored.tipCapMinor ?? defaults.tipCapMinor)
+    }
+
+    var stored: Data {
+        let stored = Stored(investment: investment?.ticker,
+                            charity: charity?.id,
+                            savingsAccountID: savingsAccountID,
+                            hiddenJars: hiddenJars.map(\.rawValue).sorted(),
+                            notesAllowed: notesAllowed,
+                            dailyLimitMinor: dailyLimitMinor,
+                            noDailyLimit: dailyLimitMinor == nil,
+                            tipWhilePaying: tipWhilePaying,
+                            tipFromChange: tipFromChange,
+                            tipCapMinor: tipCapMinor,
+                            noTipCap: tipCapMinor == nil)
+        return (try? JSONEncoder().encode(stored)) ?? Data()
+    }
+}
+
 /// One piece of money that went in a jar.
 struct JarDrop: Identifiable, Equatable {
     let id = UUID()

@@ -63,6 +63,7 @@ final class CashScene: SKScene {
     private var payLineY: CGFloat { max(size.height - payLineInset, size.height * 0.5) }
 
     private let motion = MotionManager()
+    private var reduceMotionObserver: NSObjectProtocol?
 
     // MARK: Lifecycle
 
@@ -95,13 +96,33 @@ final class CashScene: SKScene {
         layoutBoundaries()
         Haptics.prepare()
         startMotion()
+        reduceMotionObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.startMotion() }
+        }
     }
 
     override func willMove(from view: SKView) {
         motion.stop()
+        if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
+        reduceMotionObserver = nil
     }
 
+    /// Gravity follows the phone, a shake nudges the pile, and the foil
+    /// catches the light — unless Reduce Motion is on, when the pile just
+    /// falls straight down and the money holds still, the way iOS turns off
+    /// its own tilt effects. Called again whenever the setting changes.
     private func startMotion() {
+        motion.stop()
+        removeAction(forKey: "idleSheen")
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            HoloShine.setMotion(false)
+            apply(gravity: CGVector(dx: 0, dy: -1))
+            return
+        }
+        HoloShine.setMotion(true)
+
         motion.onGravity = { [weak self] gravity in self?.apply(gravity: gravity) }
         motion.onRoll = { roll in HoloShine.updateTilt(Float(sin(roll))) }
         motion.onShake = { [weak self] in self?.shuffle() }
