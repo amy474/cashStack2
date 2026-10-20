@@ -21,6 +21,10 @@ const DevSignIn = z.object({ name: z.string().regex(/^[a-z0-9-]{1,32}$/).default
 /// Signing in is the most-guessed door, so it gets its own tight limit.
 const authLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
 
+/// Longer than an identity token lives (ten minutes), so a nonce is
+/// remembered for as long as a token carrying it could still verify.
+const NONCE_KEEP_MS = 15 * 60_000;
+
 export function authRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/v1/auth/apple', { config: authLimit }, async (req) => {
     const body = AppleSignIn.parse(req.body);
@@ -33,6 +37,17 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     }
 
     const now = ctx.now();
+    // One sign-in per nonce: the same token and nonce presented again is a replay.
+    await ctx.db.query('delete from used_sign_in_nonces where used_at < $1', [new Date(now.getTime() - NONCE_KEEP_MS)]);
+    const spent = await ctx.db.query('insert into used_sign_in_nonces (nonce_hash, used_at) values ($1, $2) on conflict do nothing returning nonce_hash', [
+      sha256(body.rawNonce),
+      now,
+    ]);
+    if (spent.rows.length === 0) {
+      req.log.warn('apple sign-in nonce reused');
+      throw new HttpError(401, 'apple_rejected', 'Sign in with Apple did not go through. Try again.');
+    }
+
     const { id, isNew } = await ctx.db.tx(async (t) => {
       const existing = await t.query<{ id: string }>('select id from users where apple_sub = $1 for update', [identity.sub]);
       if (existing.rows[0]) {

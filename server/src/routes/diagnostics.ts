@@ -1,22 +1,31 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Ctx } from '../context.ts';
+import { quoted } from '../alerts.ts';
+import { HttpError, type Ctx } from '../context.ts';
 
 const KEEP_DAYS = 90;
 const MAX_PER_REPORT = 50;
+/// Reports come in without a token, so the table could otherwise be filled
+/// by anyone. A real crash loop across every phone is far below this.
+const MAX_PER_DAY = 2000;
+
+/// Free text from the report. Control characters are dropped: these strings
+/// are printed to a terminal by `npm run diagnostics`, where an escape
+/// sequence could rewrite the screen or the clipboard.
+const text = (max: number) => z.string().max(max).transform((s) => s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ''));
 
 /// The parts of MetricKit's MXDiagnosticPayload JSON the server reads. Every
 /// diagnostic carries `diagnosticMetaData`; everything else is kept as sent.
 const Meta = z.looseObject({
-  appVersion: z.string().max(40).optional(),
-  appBuildVersion: z.string().max(40).optional(),
-  osVersion: z.string().max(80).optional(),
-  deviceType: z.string().max(40).optional(),
+  appVersion: text(40).optional(),
+  appBuildVersion: text(40).optional(),
+  osVersion: text(80).optional(),
+  deviceType: text(40).optional(),
   exceptionType: z.number().optional(),
   exceptionCode: z.number().optional(),
   signal: z.number().optional(),
-  terminationReason: z.string().max(300).optional(),
-  hangDuration: z.string().max(40).optional(),
+  terminationReason: text(300).optional(),
+  hangDuration: text(40).optional(),
 });
 const Diagnostic = z.looseObject({ diagnosticMetaData: Meta.optional() });
 const list = z.array(Diagnostic).max(MAX_PER_REPORT).optional();
@@ -85,6 +94,16 @@ export function diagnosticsRoutes(app: FastifyInstance, ctx: Ctx) {
       if (rows.length > MAX_PER_REPORT) rows.length = MAX_PER_REPORT;
 
       const now = ctx.now();
+      const { rows: [today] } = await ctx.db.query<{ count: string | number }>(
+        'select count(*) as count from diagnostics where received_at > $1',
+        [new Date(now.getTime() - 86_400_000)],
+      );
+      if (Number(today?.count ?? 0) + rows.length > MAX_PER_DAY) {
+        ctx.alerts.notify('diagnostics:full', `CashStack API: more than ${MAX_PER_DAY} diagnostic reports in a day; turning more away until tomorrow.`);
+        reply.header('Retry-After', '3600');
+        throw new HttpError(429, 'rate_limited', 'Too many reports today. Try again later.');
+      }
+
       await ctx.db.tx(async (t) => {
         for (const row of rows) {
           await t.query(
@@ -100,10 +119,11 @@ export function diagnosticsRoutes(app: FastifyInstance, ctx: Ctx) {
       for (const row of rows) {
         req.log.warn({ kind: row.kind, build: row.meta.appBuildVersion, summary: row.summary }, 'app diagnostic received');
         if (row.kind !== 'crash') continue;
+        // Everything here but the wording is from the report, so it goes in quoted.
         const version = `${row.meta.appVersion ?? '?'} (${row.meta.appBuildVersion ?? '?'})`;
         ctx.alerts.notify(
           `crash:${row.meta.appBuildVersion}:${row.summary}`,
-          `CashStack ${version} crashed: ${row.summary} on ${row.meta.deviceType ?? 'an iPhone'}, ${row.meta.osVersion ?? 'unknown iOS'}. \`npm run diagnostics\` has the call stack.`,
+          `CashStack ${quoted(version)} crashed: ${quoted(row.summary)} on ${quoted(row.meta.deviceType ?? 'an iPhone')}, ${quoted(row.meta.osVersion ?? 'unknown iOS')}. \`npm run diagnostics\` has the call stack.`,
         );
       }
       return reply.code(202).send({ received: rows.length });
