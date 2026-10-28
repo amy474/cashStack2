@@ -150,7 +150,9 @@ export function bankRoutes(app: FastifyInstance, ctx: Ctx) {
 
   /// After the web sheet closes: wait for the new connections' accounts to
   /// arrive (Basiq fetches them in the background), then hand them over.
-  app.post('/v1/consent/sessions/:id/wait', signedIn, async (req) => {
+  /// Each call can poll Basiq for up to 25 seconds, so it has its own limit;
+  /// the app makes at most four in a row.
+  app.post('/v1/consent/sessions/:id/wait', { ...signedIn, config: perPerson(8) }, async (req) => {
     const { id: sessionId } = IdParam.parse(req.params);
     const id = userId(req);
     const { rows } = await ctx.db.query<{ job_ids: string[]; returned_at: Date | null; action: string }>(

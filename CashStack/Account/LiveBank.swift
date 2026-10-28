@@ -100,7 +100,11 @@ struct BankLink {
                 return .cancelled
             }
             let query = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            guard let id = query.first(where: { $0.name == "session" })?.value else {
+            // It goes into a request path, so only a well-formed session id
+            // will do — never something like "../../me".
+            guard callback.host() == "consent",
+                  let id = query.first(where: { $0.name == "session" })?.value,
+                  UUID(uuidString: id) != nil else {
                 return .failed("That took too long and the link expired. Try connecting again.")
             }
 

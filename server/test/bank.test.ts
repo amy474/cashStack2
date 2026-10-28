@@ -72,6 +72,16 @@ describe('connecting a bank', () => {
     assert.doesNotMatch(JSON.stringify(body), /063000|1234 1965|600000157441965/);
   });
 
+  test('waiting on a consent session is held to a few calls a minute', async () => {
+    const { accessToken } = await t.signIn('apple-wait-limit');
+    const { sessionId } = await t.connectBank(accessToken);
+    const codes: number[] = [];
+    for (let i = 0; i < 9; i++) {
+      codes.push((await t.app.inject({ method: 'POST', url: `/v1/consent/sessions/${sessionId}/wait`, headers: bearer(accessToken) })).statusCode);
+    }
+    assert.deepEqual(codes, [...Array(8).fill(200), 429]);
+  });
+
   test('a bank that fails says so', async () => {
     const { accessToken } = await t.signIn('apple-fail');
     const { sessionId } = await t.connectBank(accessToken, { fail: true });
