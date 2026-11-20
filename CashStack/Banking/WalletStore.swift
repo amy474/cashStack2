@@ -179,6 +179,10 @@ final class WalletStore: ObservableObject {
         }
         adopt(merged)
         phase = .ready
+        // UI tests can raise a made-up error with `-demoError "…"`.
+        if !isLive, let message = UserDefaults.standard.string(forKey: "demoError") {
+            errorMessage = message
+        }
     }
 
     /// Take a fresh set of accounts from the bank. Any practice spending is

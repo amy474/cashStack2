@@ -81,6 +81,9 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     header
                         .frame(height: headerHeight)
+                        // The UI tests measure the banner's gap from here.
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("header")
                         .padding(.top, safeTop)
                         .background(TopGlass())
                         .animation(.easeInOut(duration: 0.18), value: showsJars)
@@ -97,6 +100,8 @@ struct RootView: View {
                 // Already inside the safe area, so only the header's own
                 // height pushes it down.
                 banner
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("banner")
                     .padding(.horizontal, 18)
                     .padding(.top, headerHeight + bannerGap)
                     .zIndex(3)
@@ -523,10 +528,6 @@ private struct WalletHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("CASHSTACK")
-                    .font(Theme.label(11))
-                    .kerning(2.4)
-                    .foregroundStyle(Theme.ink)
                 Spacer()
                 Button(action: onJars) {
                     HStack(spacing: 6) {
