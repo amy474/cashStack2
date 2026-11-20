@@ -31,6 +31,8 @@ struct RootView: View {
     /// Every header is the same height, so the pay line never has to move.
     private let headerHeight: CGFloat = 194
     private let footerHeight: CGFloat = 92
+    /// The gap between the header and a receipt, toast or hint under it.
+    private let bannerGap: CGFloat = 24
     /// How long the receipt holds the tip jar out for some change.
     private static let tipWindow: TimeInterval = 8
 
@@ -96,7 +98,7 @@ struct RootView: View {
                 // height pushes it down.
                 banner
                     .padding(.horizontal, 18)
-                    .padding(.top, headerHeight + 14)
+                    .padding(.top, headerHeight + bannerGap)
                     .zIndex(3)
             }
             .onPreferenceChange(DropTargetFrames.self) { frames in
