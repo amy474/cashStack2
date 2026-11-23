@@ -306,6 +306,11 @@ final class PaymentFlowUITests: XCTestCase {
         app.otherElements.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
     }
 
+    /// An element's label, or nil if it isn't on screen by the time it's read.
+    private func currentLabel(_ element: XCUIElement) -> String? {
+        (try? element.snapshot())?.label
+    }
+
     /// "$287.65" -> 28765, "−$11.05" -> -1105
     private func cents(_ label: String) -> Int {
         let value = Int(label.filter(\.isNumber)) ?? 0
@@ -346,8 +351,10 @@ final class PaymentFlowUITests: XCTestCase {
     /// Keep handing over the biggest note to hand until the bill is covered.
     private func payOff() {
         for _ in 0..<8 {
-            let label = app.staticTexts["outstandingAmount"]
-            guard label.exists, cents(label.label) > 0 else { return }
+            // Read it in one go: checking it exists and then reading it can
+            // straddle the payment settling, and reading a figure that has
+            // gone fails the test outright.
+            guard let owed = currentLabel(app.staticTexts["outstandingAmount"]), cents(owed) > 0 else { return }
             guard let piece = lowestPiece(of: notes) ?? lowestPiece(of: coins) else { return }
             handOver(piece)
             Thread.sleep(forTimeInterval: 0.8)

@@ -241,8 +241,10 @@ final class CoinJarUITests: XCTestCase {
     /// Keep handing over the biggest note to hand until the bill is covered.
     private func payOff() {
         for _ in 0..<8 {
-            let label = app.staticTexts["outstandingAmount"]
-            guard label.exists, cents(label.label) > 0 else { return }
+            // Read it in one go: checking it exists and then reading it can
+            // straddle the payment settling, and reading a figure that has
+            // gone fails the test outright.
+            guard let owed = currentLabel(app.staticTexts["outstandingAmount"]), cents(owed) > 0 else { return }
             guard let piece = lowestPiece(of: notes) ?? lowestPiece(of: coins) else { return }
             let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.10))
             point(in: piece)
@@ -251,9 +253,16 @@ final class CoinJarUITests: XCTestCase {
         }
     }
 
-    /// "$287.65" -> 28765
+    /// An element's label, or nil if it isn't on screen by the time it's read.
+    private func currentLabel(_ element: XCUIElement) -> String? {
+        (try? element.snapshot())?.label
+    }
+
+    /// "$287.65" -> 28765, "−$11.05" -> -1105: the figure goes negative
+    /// while the change is on its way back.
     private func cents(_ label: String) -> Int {
-        Int(label.filter(\.isNumber)) ?? 0
+        let value = Int(label.filter(\.isNumber)) ?? 0
+        return label.hasPrefix("−") || label.hasPrefix("-") ? -value : value
     }
 
     /// The value of the piece named at the start of a line: "50c …" or "$2 …".
