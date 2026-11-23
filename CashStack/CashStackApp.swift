@@ -76,6 +76,9 @@ struct AppRoot: View {
             }
         }
         .environmentObject(session)
+        #if DEBUG
+        .onAppear { TouchIndicator.installIfAsked() }
+        #endif
         .task {
             let status = status
             await session.api.observe { notice in

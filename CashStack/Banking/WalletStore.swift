@@ -92,6 +92,17 @@ final class WalletStore: ObservableObject {
             spareChange = defaults.data(forKey: Preference.jarSettings).flatMap(SpareChangeSettings.init(stored:)) ?? SpareChangeSettings()
             coachMarkSeen = defaults.bool(forKey: Preference.jarCoachSeen)
         }
+        #if DEBUG
+        // Screen recordings can start the demo with every jar already pointed
+        // somewhere (`-demoJars YES`) and the first-run hint out of the way
+        // (`-demoHintSeen YES`), so a clip shows coins going straight in.
+        if !isLive, defaults.bool(forKey: "demoJars") {
+            spareChange.investment = Investment.catalogue.first { $0.ticker == "OZ200" }
+            spareChange.charity = Charity.catalogue.first { $0.id == "wildlife" }
+            spareChange.savingsAccountID = "meridian-saver"
+        }
+        if !isLive, defaults.bool(forKey: "demoHintSeen") { coachMarkSeen = true }
+        #endif
     }
 
     // MARK: Derived
